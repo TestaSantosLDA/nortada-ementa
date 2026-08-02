@@ -10,6 +10,32 @@
           ".validate": "newData.isString() && newData.val().length <= 500"
         }
       }
+    },
+    "reviews": {
+      "$periodo": {
+        "$dia": {
+          "$entryId": {
+            ".read": "auth != null",
+            ".write": "auth != null",
+            ".validate": "newData.hasChildren(['type', 'ts']) && ((newData.child('type').val() == 'review' && newData.child('stars').isNumber() && newData.child('stars').val() >= 1 && newData.child('stars').val() <= 5) || (newData.child('type').val() == 'recommendation' && !newData.hasChild('stars') && newData.child('text').isString() && newData.child('text').val().length > 0))",
+            "type": {
+              ".validate": "newData.isString() && (newData.val() == 'review' || newData.val() == 'recommendation')"
+            },
+            "stars": {
+              ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 5"
+            },
+            "text": {
+              ".validate": "newData.isString() && newData.val().length <= 500"
+            },
+            "ts": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      }
     }
   }
 }

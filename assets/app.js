@@ -35,16 +35,21 @@ const SHORT_WD = {
 };
 
 const LOCAL_KEY = "nortada-ementa-2026-08";
+const LOCAL_FEEDBACK_KEY = "nortada-feedback-2026-08";
 const MAX_LEN = 500;
+const PERIODO = DB_PATH.split("/")[1];
+const REVIEWS_PATH = "reviews/" + PERIODO;
 
 /* =========================================================
    Estado
    ========================================================= */
 
 let menus = {};                 // { "2026-08-01": "Bacalhau à Brás", ... }
+let feedback = {};              // { "2026-08-01": { entryId: {type, stars, text, ts} } }
 let filter = null;              // pessoa selecionada, ou null
 let backend = null;             // preenchido no arranque
 const textareas = new Map();    // dayId -> elemento
+const feedbackLists = new Map(); // dayId -> elemento <ul>
 
 const $status = document.getElementById("status");
 const $note = document.getElementById("mode-note");
@@ -82,6 +87,21 @@ function localBackend() {
     async write(dayId, value) {
       menus[dayId] = value;
       localStorage.setItem(LOCAL_KEY, JSON.stringify(menus));
+    },
+    async startFeedback(onRemote) {
+      try {
+        feedback = JSON.parse(localStorage.getItem(LOCAL_FEEDBACK_KEY) || "{}");
+      } catch {
+        feedback = {};
+      }
+      onRemote(feedback);
+    },
+    async writeFeedback(dayId, entry) {
+      const entryId = "local-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+      feedback[dayId] = feedback[dayId] || {};
+      feedback[dayId][entryId] = entry;
+      localStorage.setItem(LOCAL_FEEDBACK_KEY, JSON.stringify(feedback));
+      return entryId;
     }
   };
 }
@@ -92,13 +112,14 @@ async function firebaseBackend() {
     import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"),
     import("https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js")
   ]);
-  const { getDatabase, ref, onValue, update } = dbMod;
+  const { getDatabase, ref, onValue, update, push, set } = dbMod;
 
   const app = initializeApp(firebaseConfig);
   await signInAnonymously(getAuth(app));
 
   const db = getDatabase(app);
   const node = ref(db, DB_PATH);
+  const reviewsNode = ref(db, REVIEWS_PATH);
 
   return {
     label: "firebase",
@@ -111,6 +132,18 @@ async function firebaseBackend() {
     },
     async write(dayId, value) {
       await update(node, { [dayId]: value });
+    },
+    async startFeedback(onRemote) {
+      onValue(
+        reviewsNode,
+        (snap) => onRemote(snap.val() || {}),
+        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
+      );
+    },
+    async writeFeedback(dayId, entry) {
+      const entryRef = push(ref(db, REVIEWS_PATH + "/" + dayId));
+      await set(entryRef, entry);
+      return entryRef.key;
     }
   };
 }
@@ -193,13 +226,199 @@ function buildCard(d, today) {
 
   textareas.set(d.id, ta);
   requestAnimationFrame(() => autoGrow(ta));
+
+  card.appendChild(buildFeedbackSection(d));
   return card;
+}
+
+/* =========================================================
+   Reviews e recomendações
+   ========================================================= */
+
+function renderFeedbackList(dayId) {
+  const list = feedbackLists.get(dayId);
+  if (!list) return;
+
+  const entries = Object.values(feedback[dayId] || {}).sort((a, b) => a.ts - b.ts);
+  list.replaceChildren();
+
+  if (!entries.length) {
+    const empty = document.createElement("li");
+    empty.className = "feedback-empty";
+    empty.textContent = "Ainda sem reviews nem recomendações.";
+    list.appendChild(empty);
+    return;
+  }
+
+  entries.forEach((entry) => {
+    const li = document.createElement("li");
+    li.className = "feedback-item " + entry.type;
+
+    if (entry.type === "review") {
+      const stars = document.createElement("span");
+      stars.className = "fb-stars-display";
+      stars.textContent = "★".repeat(entry.stars) + "☆".repeat(5 - entry.stars);
+      li.appendChild(stars);
+    } else {
+      const tag = document.createElement("span");
+      tag.className = "fb-tag";
+      tag.textContent = "Recomendação";
+      li.appendChild(tag);
+    }
+
+    if (entry.text) {
+      const txt = document.createElement("span");
+      txt.className = "fb-text-display";
+      txt.textContent = entry.text;
+      li.appendChild(txt);
+    }
+
+    list.appendChild(li);
+  });
+}
+
+function buildFeedbackSection(d) {
+  const wrap = document.createElement("div");
+  wrap.className = "feedback";
+
+  const title = document.createElement("h3");
+  title.className = "feedback-title";
+  title.textContent = "Reviews e recomendações";
+  wrap.appendChild(title);
+
+  const list = document.createElement("ul");
+  list.className = "feedback-list";
+  wrap.appendChild(list);
+  feedbackLists.set(d.id, list);
+  renderFeedbackList(d.id);
+
+  const form = document.createElement("form");
+  form.className = "feedback-form";
+
+  const typeRow = document.createElement("div");
+  typeRow.className = "fb-type";
+
+  const reviewLabel = document.createElement("label");
+  const reviewRadio = document.createElement("input");
+  reviewRadio.type = "radio";
+  reviewRadio.name = "fb-type-" + d.id;
+  reviewRadio.value = "review";
+  reviewRadio.checked = true;
+  reviewLabel.append(reviewRadio, document.createTextNode(" Review"));
+
+  const recLabel = document.createElement("label");
+  const recRadio = document.createElement("input");
+  recRadio.type = "radio";
+  recRadio.name = "fb-type-" + d.id;
+  recRadio.value = "recommendation";
+  recLabel.append(recRadio, document.createTextNode(" Recomendação"));
+
+  typeRow.append(reviewLabel, recLabel);
+  form.appendChild(typeRow);
+
+  const starsRow = document.createElement("div");
+  starsRow.className = "fb-stars";
+  let selectedStars = 0;
+  const starButtons = [];
+  for (let i = 1; i <= 5; i++) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "fb-star";
+    b.textContent = "★";
+    b.setAttribute("aria-label", i + (i > 1 ? " estrelas" : " estrela"));
+    b.addEventListener("click", () => {
+      selectedStars = i;
+      starButtons.forEach((sb, idx) => sb.classList.toggle("on", idx < i));
+    });
+    starButtons.push(b);
+    starsRow.appendChild(b);
+  }
+  form.appendChild(starsRow);
+
+  const textField = document.createElement("textarea");
+  textField.className = "fb-text";
+  textField.maxLength = MAX_LEN;
+  textField.placeholder = "Comentário (opcional)";
+  form.appendChild(textField);
+
+  function currentType() {
+    return reviewRadio.checked ? "review" : "recommendation";
+  }
+
+  function updateMode() {
+    const isReview = currentType() === "review";
+    starsRow.classList.toggle("hidden", !isReview);
+    if (!isReview) {
+      selectedStars = 0;
+      starButtons.forEach((sb) => sb.classList.remove("on"));
+    }
+    textField.placeholder = isReview
+      ? "Comentário (opcional)"
+      : "O que sugeres para este dia?";
+  }
+  reviewRadio.addEventListener("change", updateMode);
+  recRadio.addEventListener("change", updateMode);
+
+  const submitBtn = document.createElement("button");
+  submitBtn.type = "submit";
+  submitBtn.className = "fb-submit";
+  submitBtn.textContent = "Adicionar";
+  form.appendChild(submitBtn);
+
+  const errorEl = document.createElement("p");
+  errorEl.className = "fb-error";
+  form.appendChild(errorEl);
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    errorEl.textContent = "";
+    const type = currentType();
+    const text = textField.value.trim();
+
+    if (type === "review" && selectedStars === 0) {
+      errorEl.textContent = "Escolhe uma classificação de 1 a 5 estrelas.";
+      return;
+    }
+    if (type === "recommendation" && !text) {
+      errorEl.textContent = "Escreve a tua recomendação.";
+      return;
+    }
+
+    const entry = { type, text, ts: Date.now() };
+    if (type === "review") entry.stars = selectedStars;
+
+    submitBtn.disabled = true;
+    backend
+      .writeFeedback(d.id, entry)
+      .then(() => {
+        textField.value = "";
+        selectedStars = 0;
+        starButtons.forEach((sb) => sb.classList.remove("on"));
+        reviewRadio.checked = true;
+        updateMode();
+      })
+      .catch(() => {
+        errorEl.textContent = "Não foi possível guardar. Tenta outra vez.";
+      })
+      .finally(() => {
+        submitBtn.disabled = false;
+      });
+  });
+
+  wrap.appendChild(form);
+  return wrap;
+}
+
+function applyRemoteFeedback(remote) {
+  feedback = remote || {};
+  feedbackLists.forEach((_, dayId) => renderFeedbackList(dayId));
 }
 
 function renderWeeks() {
   const host = document.getElementById("weeks");
   host.replaceChildren();
   textareas.clear();
+  feedbackLists.clear();
   const today = todayId();
 
   [[0, 7], [7, 14]].forEach(([from, to], i) => {
@@ -270,7 +489,23 @@ document.getElementById("copy").addEventListener("click", async () => {
   DAYS.forEach((d) => {
     const m = (menus[d.id] || "").trim().replace(/\n+/g, " / ");
     out += "\uD83D\uDCC5 " + d.num + "/08 (" + SHORT_WD[d.wd] + ") \u2014 " + PEOPLE[d.who].name + "\n";
-    out += "\uD83C\uDF7D\uFE0F Ementa: " + m + "\n\n";
+    out += "\uD83C\uDF7D\uFE0F Ementa: " + m + "\n";
+
+    const entries = Object.values(feedback[d.id] || {});
+    const reviews = entries.filter((e) => e.type === "review");
+    const recs = entries.filter((e) => e.type === "recommendation");
+    if (reviews.length || recs.length) {
+      const parts = [];
+      if (reviews.length) {
+        const avg = reviews.reduce((s, r) => s + r.stars, 0) / reviews.length;
+        parts.push("\u2B50 " + avg.toFixed(1) + " (" + reviews.length + ")");
+      }
+      if (recs.length) {
+        parts.push(recs.length + (recs.length > 1 ? " recomenda\u00E7\u00F5es" : " recomenda\u00E7\u00E3o"));
+      }
+      out += parts.join(" \u00B7 ") + "\n";
+    }
+    out += "\n";
   });
   try {
     await navigator.clipboard.writeText(out.trim());
@@ -305,6 +540,7 @@ async function boot() {
   }
 
   await backend.start(applyRemote);
+  await backend.startFeedback(applyRemoteFeedback);
   setStatus("");
 }
 
