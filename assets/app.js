@@ -1467,7 +1467,64 @@ $tabCompras.addEventListener("click", () => setActiveTab("compras"));
    Listas de compras
    ========================================================= */
 
-const shopListEls = new Map(); // listId -> { card, nameEl, itemsUl }
+const shopListEls = new Map(); // listId -> { card, nameEl, itemsUl, chipsEl }
+
+/* Itens "do costume": os mais repetidos no histórico de todas as listas. */
+function frequentShoppingItems() {
+  const freq = new Map(); // norm -> { display, count, lastTs }
+  Object.values(shoppingLists).forEach((list) => {
+    Object.values((list || {}).items || {}).forEach((item) => {
+      const display = String(item.name || "").trim();
+      if (!display) return;
+      const norm = display.toLowerCase();
+      let entry = freq.get(norm);
+      if (!entry) {
+        entry = { display, count: 0, lastTs: 0 };
+        freq.set(norm, entry);
+      }
+      entry.count++;
+      if ((item.ts || 0) >= entry.lastTs) {
+        entry.lastTs = item.ts || 0;
+        entry.display = display;
+      }
+    });
+  });
+  return [...freq.entries()]
+    .filter(([, e]) => e.count >= 2)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 8);
+}
+
+function renderShopChips(listId) {
+  const els = shopListEls.get(listId);
+  if (!els) return;
+
+  const present = new Set(
+    Object.values((shoppingLists[listId] || {}).items || {}).map((item) =>
+      String(item.name || "").trim().toLowerCase()
+    )
+  );
+
+  els.chipsEl.replaceChildren();
+  frequentShoppingItems()
+    .filter(([norm]) => !present.has(norm))
+    .forEach(([, entry]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "shop-chip";
+      b.textContent = entry.display;
+      b.addEventListener("click", () => {
+        b.disabled = true;
+        backend
+          .addShoppingItem(listId, entry.display)
+          .catch(() => setStatus("Não foi possível adicionar o item.", "error"))
+          .finally(() => {
+            b.disabled = false;
+          });
+      });
+      els.chipsEl.appendChild(b);
+    });
+}
 
 function buildShopListCard(listId) {
   const card = document.createElement("article");
@@ -1480,6 +1537,10 @@ function buildShopListCard(listId) {
   const itemsUl = document.createElement("ul");
   itemsUl.className = "shop-items";
   card.appendChild(itemsUl);
+
+  const chipsEl = document.createElement("div");
+  chipsEl.className = "shop-chips";
+  card.appendChild(chipsEl);
 
   const form = document.createElement("form");
   form.className = "shop-add";
@@ -1513,7 +1574,7 @@ function buildShopListCard(listId) {
   });
   card.appendChild(form);
 
-  return { card, nameEl, itemsUl };
+  return { card, nameEl, itemsUl, chipsEl };
 }
 
 function renderShopItems(listId) {
@@ -1580,6 +1641,7 @@ function renderShoppingLists() {
     }
     els.nameEl.textContent = list.name || "";
     renderShopItems(listId);
+    renderShopChips(listId);
 
     const inPlace = $shopLists.children[idx];
     if (inPlace !== els.card) $shopLists.insertBefore(els.card, inPlace || null);

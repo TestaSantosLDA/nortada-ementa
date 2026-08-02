@@ -102,6 +102,20 @@ header.top{
 .shop-item input[type="checkbox"]{accent-color:var(--ink);width:16px;height:16px;flex:none;cursor:pointer}
 .shop-item.done span{text-decoration:line-through;color:var(--muted)}
 
+.shop-chips{display:flex;flex-wrap:wrap;gap:6px}
+.shop-chips:empty{display:none}
+.shop-chip{
+  appearance:none;cursor:pointer;
+  background:var(--paper);border:1px dashed var(--line);border-radius:999px;
+  padding:4px 12px;font-family:var(--body);font-size:12.5px;font-weight:500;color:var(--muted);
+  transition:border-color .15s ease,background .15s ease,color .15s ease;
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.shop-chip::before{content:"+ "}
+.shop-chip:hover{border-color:#C9CFC6;background:var(--card);color:var(--ink)}
+.shop-chip:disabled{opacity:.5;cursor:default}
+.shop-chip:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
 .shop-add{display:flex;gap:8px;margin-top:2px}
 .shop-add input{
   flex:1;min-width:0;
