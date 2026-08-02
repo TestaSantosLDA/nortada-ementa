@@ -659,8 +659,41 @@ textarea:disabled{color:var(--muted)}
 }
 
 /* ---------- listas de compras: progresso + feitos no fim ---------- */
-.shop-list-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.shop-list-head{display:flex;align-items:center;gap:10px}
+.shop-list-head .shop-list-name{flex:1;min-width:0}
 .shop-progress{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.shop-del{
+  appearance:none;cursor:pointer;flex:none;
+  width:28px;height:28px;border-radius:50%;
+  border:1px solid var(--line);background:var(--card);color:var(--muted);
+  font-size:15px;line-height:1;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:border-color .15s ease,color .15s ease;
+}
+.shop-del:hover{border-color:var(--francisco);color:var(--francisco)}
+.shop-del:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+@media (max-width:760px){.shop-del{width:40px;height:40px;font-size:18px}}
+
+/* ---------- confirmação de apagar lista ---------- */
+.confirm-sheet{
+  max-width:400px;padding:20px;
+  display:flex;flex-direction:column;gap:12px;
+}
+.confirm-sheet .gate-sub{line-height:1.55}
+.confirm-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
+.confirm-delete{
+  appearance:none;cursor:pointer;flex:1;min-height:44px;
+  background:var(--francisco);color:#fff;border:0;border-radius:999px;
+  padding:11px 18px;font-family:var(--body);font-size:14px;font-weight:600;
+  transition:opacity .15s ease;
+}
+.confirm-delete:hover{opacity:.88}
+.confirm-delete:disabled{opacity:.6;cursor:default}
+.confirm-delete:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.confirm-actions .admin-btn{flex:1;min-height:44px}
+@media (max-width:560px){
+  .confirm-sheet{max-width:none;padding:20px 16px calc(20px + env(safe-area-inset-bottom))}
+}
 .shop-bar{height:4px;border-radius:2px;background:var(--paper);overflow:hidden}
 .shop-bar > i{display:block;height:100%;background:var(--luis);transition:width .2s ease}
 .shop-item.done label{opacity:.65}

@@ -349,6 +349,9 @@ function makeBackend(db, fns) {
     async setShoppingItemDone(listId, itemId, done) {
       await set(ref(db, "shoppingLists/" + listId + "/items/" + itemId + "/done"), done);
     },
+    async deleteShoppingList(listId) {
+      await set(ref(db, "shoppingLists/" + listId), null);
+    },
     startProfiles(onRemote, onError) {
       onValue(
         usersNode,
@@ -1686,6 +1689,80 @@ function renderShopChips(listId) {
     });
 }
 
+/* Apagar uma lista pede sempre confirmação: a remoção é partilhada
+   por toda a família e leva os itens todos com ela. */
+const $confirmPanel = document.createElement("div");
+$confirmPanel.className = "panel";
+$confirmPanel.hidden = true;
+document.body.appendChild($confirmPanel);
+
+function closeConfirmPanel() {
+  $confirmPanel.hidden = true;
+  $confirmPanel.replaceChildren();
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$confirmPanel.hidden) closeConfirmPanel();
+});
+
+function openDeleteListConfirm(listId) {
+  const list = shoppingLists[listId];
+  if (!list) return;
+  const count = Object.keys(list.items || {}).length;
+
+  $confirmPanel.replaceChildren();
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "panel-backdrop";
+  backdrop.addEventListener("click", closeConfirmPanel);
+
+  const sheet = document.createElement("div");
+  sheet.className = "panel-sheet confirm-sheet";
+
+  const title = document.createElement("h2");
+  title.className = "gate-title admin-title";
+  title.textContent = "Apagar a lista?";
+
+  const msg = document.createElement("p");
+  msg.className = "gate-sub";
+  msg.textContent =
+    "«" + (list.name || "") + "»" +
+    (count
+      ? " e " + (count === 1 ? "o item que tem desaparecem" : "os " + count + " itens que tem desaparecem")
+      : " desaparece") +
+    " para toda a família. Não dá para desfazer.";
+
+  const actions = document.createElement("div");
+  actions.className = "confirm-actions";
+
+  const delBtn = document.createElement("button");
+  delBtn.type = "button";
+  delBtn.className = "confirm-delete";
+  delBtn.textContent = "Apagar lista";
+  delBtn.addEventListener("click", () => {
+    delBtn.disabled = true;
+    backend
+      .deleteShoppingList(listId)
+      .then(closeConfirmPanel)
+      .catch(() => {
+        delBtn.disabled = false;
+        setStatus("Não foi possível apagar a lista.", "error");
+      });
+  });
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "admin-btn";
+  cancelBtn.textContent = "Cancelar";
+  cancelBtn.addEventListener("click", closeConfirmPanel);
+
+  actions.append(delBtn, cancelBtn);
+  sheet.append(title, msg, actions);
+  $confirmPanel.append(backdrop, sheet);
+  $confirmPanel.hidden = false;
+  cancelBtn.focus();
+}
+
 function buildShopListCard(listId) {
   const card = document.createElement("article");
   card.className = "shop-list";
@@ -1693,13 +1770,20 @@ function buildShopListCard(listId) {
   const head = document.createElement("div");
   head.className = "shop-list-head";
 
+  const delBtn = document.createElement("button");
+  delBtn.type = "button";
+  delBtn.className = "shop-del";
+  delBtn.setAttribute("aria-label", "Apagar lista");
+  delBtn.textContent = "×";
+  delBtn.addEventListener("click", () => openDeleteListConfirm(listId));
+
   const nameEl = document.createElement("h3");
   nameEl.className = "shop-list-name";
 
   const progressEl = document.createElement("span");
   progressEl.className = "shop-progress";
 
-  head.append(nameEl, progressEl);
+  head.append(delBtn, nameEl, progressEl);
   card.appendChild(head);
 
   const barEl = document.createElement("div");
