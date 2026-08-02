@@ -6,13 +6,13 @@
 // em modo local (só guarda no browser de cada pessoa).
 
 export const firebaseConfig = {
-  apiKey: "COLOCAR_AQUI",
-  authDomain: "COLOCAR_AQUI.firebaseapp.com",
-  databaseURL: "https://COLOCAR_AQUI-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "COLOCAR_AQUI",
-  storageBucket: "COLOCAR_AQUI.appspot.com",
-  messagingSenderId: "COLOCAR_AQUI",
-  appId: "COLOCAR_AQUI"
+  apiKey: "AIzaSyBPZjhNBovy9nOvt-2PpvBjcmsYc4aqEUk",
+  authDomain: "ementa-nortada.firebaseapp.com",
+  databaseURL: "https://ementa-nortada-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "ementa-nortada",
+  storageBucket: "ementa-nortada.firebasestorage.app",
+  messagingSenderId: "586654751671",
+  appId: "1:586654751671:web:2318916d3e35fcede1a632"
 };
 
 // Caminho onde as ementas ficam guardadas na base de dados.
