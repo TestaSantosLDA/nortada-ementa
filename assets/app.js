@@ -653,6 +653,18 @@ function openAdminPanel() {
   saveBtn.textContent = "Guardar";
   form.appendChild(saveBtn);
 
+  /* Aviso de escala desequilibrada: o primeiro "Guardar" avisa, o segundo
+     guarda na mesma. Mexer nos cozinheiros ou nas datas recomeça. */
+  let warnedImbalance = false;
+  const resetImbalanceWarning = () => {
+    warnedImbalance = false;
+    saveBtn.textContent = "Guardar";
+    errorEl.textContent = "";
+  };
+  checkboxes.forEach((cb) => cb.addEventListener("change", resetImbalanceWarning));
+  startInput.addEventListener("change", resetImbalanceWarning);
+  endInput.addEventListener("change", resetImbalanceWarning);
+
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     errorEl.textContent = "";
@@ -671,11 +683,11 @@ function openAdminPanel() {
       return;
     }
 
-    /* A rotação é round-robin: o período tem de dividir certo pelos
-       cozinheiros, senão os primeiros ficam com um jantar a mais. */
+    /* A rotação é round-robin: se o período não dividir certo pelos
+       cozinheiros, os primeiros da ordem ficam com um jantar a mais. */
     const totalDays = countDays(startInput.value, endInput.value);
     const extra = totalDays % order.length;
-    if (extra) {
+    if (extra && !warnedImbalance) {
       const per = Math.floor(totalDays / order.length);
       const endings = [];
       if (totalDays > extra) {
@@ -684,10 +696,12 @@ function openAdminPanel() {
       endings.push(formatDatePt(shiftDate(endInput.value, order.length - extra)));
       errorEl.textContent =
         "São " + totalDays + " jantares para " + order.length + " cozinheiros: " +
-        extra + (extra > 1 ? " ficavam" : " ficava") + " com " + (per + 1) +
+        extra + (extra > 1 ? " ficam" : " fica") + " com " + (per + 1) +
         " e os outros com " + per +
-        ". Para todos cozinharem o mesmo número de vezes, termina a " +
-        endings.join(" ou a ") + ".";
+        ". Para ficar equilibrado, termina a " + endings.join(" ou a ") +
+        "; se não der, carrega em «Guardar mesmo assim».";
+      warnedImbalance = true;
+      saveBtn.textContent = "Guardar mesmo assim";
       return;
     }
 
