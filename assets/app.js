@@ -58,6 +58,7 @@ let profiles = {};                 // { uid: {name, householdSize, ts} }
 let filter = null;                 // pessoa selecionada, ou null
 let backend = null;                // preenchido depois do login
 let currentUser = null;            // { uid, name }
+let openPanelDay = null;            // { dayId, card, sections: {attendance, menu, feedback}, sheet, suggestionsEl }
 
 const textareas = new Map();       // dayId -> elemento
 const feedbackLists = new Map();   // dayId -> elemento <ul>
@@ -69,6 +70,7 @@ const $note = document.getElementById("mode-note");
 const $session = document.getElementById("session");
 const $gate = document.getElementById("gate");
 const $appWrap = document.getElementById("app-wrap");
+const $panel = document.getElementById("day-panel");
 
 function setStatus(text, state) {
   $status.textContent = text;
@@ -358,6 +360,7 @@ function buildCard(d, today) {
   ta.addEventListener("input", () => {
     autoGrow(ta);
     queueWrite(d.id, ta.value);
+    if (openPanelDay && openPanelDay.dayId === d.id) updatePanelSuggestions();
   });
 
   textareas.set(d.id, ta);
@@ -365,6 +368,12 @@ function buildCard(d, today) {
 
   card.insertBefore(buildAttendanceSection(d), card.querySelector(".menu"));
   card.appendChild(buildFeedbackSection(d));
+
+  card.addEventListener("click", (e) => {
+    if (e.target.closest("textarea, .feedback-form, .attendance-control")) return;
+    openDayPanel(d, card);
+  });
+
   return card;
 }
 
@@ -667,7 +676,156 @@ function buildFeedbackSection(d) {
 function applyRemoteFeedback(remote) {
   feedback = remote || {};
   feedbackLists.forEach((_, dayId) => renderFeedbackList(dayId));
+  if (openPanelDay) updatePanelSuggestions();
 }
+
+/* =========================================================
+   Painel de detalhe do dia
+   ========================================================= */
+
+function buildSuggestionsSection(d) {
+  if ((menus[d.id] || "").trim()) return null;
+
+  const recs = Object.values(feedback[d.id] || {}).filter(
+    (e) => e.type === "recommendation" && e.text
+  );
+  if (!recs.length) return null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "suggestions";
+
+  const title = document.createElement("h3");
+  title.className = "suggestions-title";
+  title.textContent = "Sugestões";
+  wrap.appendChild(title);
+
+  const list = document.createElement("ul");
+  list.className = "suggestions-list";
+
+  recs.forEach((rec) => {
+    const li = document.createElement("li");
+    li.className = "suggestion-item";
+
+    const txt = document.createElement("span");
+    txt.className = "suggestion-text";
+    txt.textContent = rec.text;
+
+    const useBtn = document.createElement("button");
+    useBtn.type = "button";
+    useBtn.className = "suggestion-use";
+    useBtn.textContent = "Usar esta sugestão";
+    useBtn.addEventListener("click", () => {
+      const ta = textareas.get(d.id);
+      if (!ta) return;
+      ta.value = rec.text;
+      autoGrow(ta);
+      queueWrite(d.id, ta.value);
+      updatePanelSuggestions();
+    });
+
+    li.append(txt, useBtn);
+    list.appendChild(li);
+  });
+
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function updatePanelSuggestions() {
+  if (!openPanelDay) return;
+  const d = DAYS.find((day) => day.id === openPanelDay.dayId);
+  if (!d) return;
+
+  if (openPanelDay.suggestionsEl) {
+    openPanelDay.suggestionsEl.remove();
+    openPanelDay.suggestionsEl = null;
+  }
+
+  const suggestions = buildSuggestionsSection(d);
+  if (suggestions) {
+    openPanelDay.sheet.insertBefore(suggestions, openPanelDay.sections.menu);
+    openPanelDay.suggestionsEl = suggestions;
+  }
+}
+
+function openDayPanel(d, card) {
+  if (openPanelDay && openPanelDay.dayId === d.id) return;
+  if (openPanelDay) closeDayPanel();
+
+  const attendanceEl = card.querySelector(".attendance");
+  const menuEl = card.querySelector(".menu");
+  const feedbackEl = card.querySelector(".feedback");
+
+  const p = PEOPLE[d.who];
+  $panel.replaceChildren();
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "panel-backdrop";
+  backdrop.addEventListener("click", closeDayPanel);
+
+  const sheet = document.createElement("div");
+  sheet.className = "panel-sheet";
+  sheet.style.setProperty("--c", p.color);
+
+  const head = document.createElement("div");
+  head.className = "panel-head";
+  head.innerHTML =
+    '<div class="panel-day">' +
+      '<div class="num">' + d.num + "</div>" +
+      '<div class="wd">' + d.wd + "</div>" +
+      '<div class="cook"><span class="dot"></span>' + p.name + "</div>" +
+    "</div>";
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "panel-close";
+  closeBtn.setAttribute("aria-label", "Fechar");
+  closeBtn.textContent = "×";
+  closeBtn.addEventListener("click", closeDayPanel);
+  head.appendChild(closeBtn);
+
+  sheet.appendChild(head);
+  sheet.appendChild(attendanceEl);
+
+  const suggestionsEl = buildSuggestionsSection(d);
+  if (suggestionsEl) sheet.appendChild(suggestionsEl);
+
+  sheet.appendChild(menuEl);
+  sheet.appendChild(feedbackEl);
+
+  $panel.append(backdrop, sheet);
+  $panel.hidden = false;
+  card.classList.add("panel-source");
+
+  openPanelDay = {
+    dayId: d.id,
+    card,
+    sheet,
+    sections: { attendance: attendanceEl, menu: menuEl, feedback: feedbackEl },
+    suggestionsEl
+  };
+
+  const ta = textareas.get(d.id);
+  if (ta) requestAnimationFrame(() => autoGrow(ta));
+}
+
+function closeDayPanel() {
+  if (!openPanelDay) return;
+  const { card, sections } = openPanelDay;
+
+  card.insertBefore(sections.attendance, card.querySelector(".menu"));
+  card.insertBefore(sections.menu, card.querySelector(".feedback"));
+  card.appendChild(sections.feedback);
+
+  card.classList.remove("panel-source");
+  $panel.hidden = true;
+  $panel.replaceChildren();
+  openPanelDay = null;
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && openPanelDay) closeDayPanel();
+});
 
 function renderWeeks() {
   const host = document.getElementById("weeks");
@@ -709,6 +867,7 @@ function applyRemote(remote) {
     ta.value = incoming;
     autoGrow(ta);
   });
+  if (openPanelDay) updatePanelSuggestions();
 }
 
 /* =========================================================
