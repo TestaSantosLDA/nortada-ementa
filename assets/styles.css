@@ -318,11 +318,9 @@ header.top{
 }
 .week-label::after{content:"";flex:1;height:1px;background:var(--line)}
 
-/* 480px é o mínimo para a linha horizontal do .day (cabeçalho + ementa +
-   presenças) caber; com o .wrap a 1280px dá no máximo 2 colunas */
 .grid{
   display:grid;gap:10px;
-  grid-template-columns:repeat(auto-fill,minmax(480px,1fr));
+  grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
 }
 @media (max-width:760px){.grid{grid-template-columns:1fr}}
 
@@ -471,55 +469,157 @@ textarea:disabled{color:var(--muted)}
    Redesign mobile-first
    ========================================================= */
 
-/* ---------- o cartão do dia passa a linha ---------- */
-/* Filhos de .day (pela ordem do buildCard): .spine, .day-head, .attendance, .menu, .feedback */
+/* ---------- o cartão do dia passa a linha compacta ----------
+   Filhos de .day (pela ordem do buildCard): .spine, .day-head, .attendance,
+   .menu, .feedback. O .day-head usa display:contents para o número/dia
+   ficarem numa coluna e o cozinheiro/ementa noutra, com o total de pessoas
+   à direita — aguenta nomes compridos sem transbordar. */
 .grid .day{
   display:grid;
-  grid-template-columns:4px auto 1fr auto;
-  grid-template-areas:"spine head menu att";
+  grid-template-columns:auto 3px minmax(0,1fr) auto;
+  grid-template-areas:
+    "num spine cook att"
+    "wd  spine menu att";
   align-items:center;
-  padding:0;overflow:hidden;
+  column-gap:12px;row-gap:2px;
+  padding:10px 14px;overflow:hidden;
 }
-.grid .day .spine{grid-area:spine;width:4px;height:100%}
-.grid .day .day-head{
-  grid-area:head;
-  display:flex;align-items:center;gap:10px;
-  padding:12px 4px 12px 12px;
+.grid .day .day-head{display:contents}
+.grid .day .spine{grid-area:spine;width:3px;height:100%;border-radius:2px}
+.grid .day .num{
+  grid-area:num;justify-self:center;align-self:end;
+  font-size:20px;line-height:1;
 }
-.grid .day .num{font-size:26px;line-height:1}
-.grid .day .wd{margin-top:0;font-size:10.5px}
-.grid .day .cook{margin-top:0}
-.grid .day .today-tag{margin-top:0}
-
+.grid .day .wd{
+  grid-area:wd;justify-self:center;align-self:start;
+  margin-top:0;font-size:9.5px;letter-spacing:.1em;
+}
+.grid .day .today-tag{display:none}                  /* hoje vive no destaque */
+.grid .day .cook{
+  grid-area:cook;align-self:end;min-width:0;
+  display:block;margin-top:0;font-size:14px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.grid .day .cook .dot{display:none}
 .grid .day .menu{
-  grid-area:menu;margin:0;padding:12px 10px;border-top:0;gap:0;min-width:0;
+  grid-area:menu;align-self:start;min-width:0;
+  margin:0;padding:0;border-top:0;gap:0;
 }
 .grid .day .menu label{display:none}                 /* "Ementa" só no painel */
 .grid .day .menu textarea{
   height:auto!important;min-height:0;                /* o autoGrow escreve height inline */
-  max-height:2.9em;overflow:hidden;
+  max-height:1.5em;overflow:hidden;
+  font-size:13px;padding:0;
 }
 .grid .day .attendance{
-  grid-area:att;margin:0;padding:12px;border-top:0;
-  flex-direction:column;align-items:flex-end;gap:6px;
+  grid-area:att;margin:0;padding:0;border-top:0;
+  flex-wrap:nowrap;justify-content:flex-end;align-items:center;gap:10px;
+}
+.grid .day .attendance::after{content:"▾";color:#C9CFC6;font-size:13px}
+.grid .day .attendance-control{display:none}         /* ajustar é no painel */
+.grid .day .attendance-badge{
+  background:transparent;padding:0;
+  display:flex;flex-direction:column;align-items:center;gap:1px;
+}
+.grid .day .attendance-badge .att-total{
+  font-family:var(--display);font-weight:800;font-size:18px;line-height:1;
+  font-variant-numeric:tabular-nums;
+}
+.grid .day .attendance-badge .att-unit{
+  font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);font-weight:600;
 }
 .grid .day .feedback{display:none}                   /* reviews vivem no painel */
 .grid .day .suggestions,
 .grid .day .swap{display:none}
 
-/* ≤560px: número + presenças em cima, ementa por baixo */
-@media (max-width:560px){
-  .grid .day{
-    grid-template-columns:4px 1fr auto;
-    grid-template-areas:
-      "spine head att"
-      "spine menu menu";
-    align-items:start;
-  }
-  .grid .day .attendance{padding:12px 12px 0}
-  .grid .day .menu{padding:4px 12px 12px 12px}
-  .grid .day .day-head{padding:12px 12px 4px}
+/* badge por omissão (painel): número e unidade lado a lado */
+.attendance-badge{display:inline-flex;align-items:baseline;gap:4px}
+.attendance-badge .att-total{font-weight:600}
+
+/* ---------- o jantar de hoje em destaque ---------- */
+.day-hero{
+  display:flex;flex-direction:column;
+  width:100%;max-width:560px;margin:20px auto 0;
+  background:var(--ink);border-color:var(--ink);border-radius:16px;
+  padding:18px 16px 16px;color:#fff;box-shadow:none;
 }
+.day-hero .spine{display:none}
+.day-hero .day-head{
+  padding:0;
+  display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;
+}
+.day-hero .today-tag{
+  order:0;margin:0;padding:0;background:transparent;
+  color:rgba(255,255,255,.6);font-size:11px;letter-spacing:.16em;
+}
+.day-hero .today-tag::after{content:" ·"}
+.day-hero .wd{
+  order:1;margin-top:0;font-size:11px;color:rgba(255,255,255,.6);
+}
+.day-hero .num{
+  order:2;
+  font-family:var(--body);font-size:11px;font-weight:600;
+  letter-spacing:.14em;color:rgba(255,255,255,.6);
+}
+.day-hero .cook{
+  order:3;flex-basis:100%;display:block;margin-top:16px;
+  font-family:var(--display);font-weight:800;font-size:28px;
+  letter-spacing:-.02em;line-height:1.1;color:#fff;
+}
+.day-hero .cook .dot{display:none}
+.day-hero .cook::before{
+  content:"Cozinha";display:block;margin-bottom:6px;
+  font-family:var(--body);font-size:10.5px;letter-spacing:.14em;
+  text-transform:uppercase;color:rgba(255,255,255,.55);font-weight:600;
+}
+/* ordem visual: cozinha → ementa → vão jantar (o DOM tem presenças antes) */
+.day-hero .day-head{order:0}
+.day-hero .menu{order:1}
+.day-hero .attendance{order:2}
+.day-hero .feedback{order:3}
+
+.day-hero .menu{
+  margin:16px 0 0;padding-top:14px;
+  border-top:1px dashed rgba(255,255,255,.18);
+}
+.day-hero .menu label{color:rgba(255,255,255,.55)}
+.day-hero textarea{color:#fff;font-size:17px;font-weight:600}
+.day-hero textarea::placeholder{color:rgba(255,255,255,.35)}
+.day-hero .attendance{
+  margin:16px 0 0;padding-top:14px;
+  border-top:1px dashed rgba(255,255,255,.18);
+}
+.day-hero .attendance-badge{
+  background:transparent;padding:0;border-radius:0;
+  display:grid;grid-template-columns:auto 1fr;
+  grid-template-areas:"lbl lbl" "n u";
+  column-gap:6px;row-gap:6px;align-items:baseline;
+}
+.day-hero .attendance-badge::before{
+  content:"Vão jantar";grid-area:lbl;
+  font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+  color:rgba(255,255,255,.55);font-weight:600;
+}
+.day-hero .attendance-badge .att-total{
+  grid-area:n;color:#fff;
+  font-family:var(--display);font-weight:800;font-size:24px;line-height:1;
+}
+.day-hero .attendance-badge .att-unit{grid-area:u;font-size:13px;color:rgba(255,255,255,.75)}
+.day-hero .att-count{color:#fff;font-size:16px}
+.day-hero .att-btn{
+  width:44px;height:44px;font-size:18px;
+  background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.22);color:#fff;
+}
+.day-hero .att-btn:hover{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.35)}
+.day-hero .att-skip{
+  flex-basis:100%;margin-top:6px;min-height:44px;
+  border:1px solid rgba(255,255,255,.25);border-radius:999px;
+  color:#fff;font-size:13.5px;text-align:center;
+}
+.day-hero .att-skip:hover{color:#fff;background:rgba(255,255,255,.08)}
+.day-hero .att-skip.active{color:#F0A08E;border-color:rgba(240,160,142,.5)}
+.day-hero .feedback{display:none}
 
 /* ---------- painel = bottom sheet no telemóvel ---------- */
 @media (max-width:560px){
