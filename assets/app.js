@@ -412,6 +412,22 @@ function buildDays(startDate, endDate, cookOrder) {
   return days;
 }
 
+function countDays(startDate, endDate) {
+  const start = new Date(startDate + "T00:00:00");
+  const end = new Date(endDate + "T00:00:00");
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+function shiftDate(iso, days) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
 function regenerateSchedule() {
   if (openPanelDay) closeDayPanel();
 
@@ -652,6 +668,26 @@ function openAdminPanel() {
     }
     if (endInput.value < startInput.value) {
       errorEl.textContent = "A data de fim não pode ser antes da de início.";
+      return;
+    }
+
+    /* A rotação é round-robin: o período tem de dividir certo pelos
+       cozinheiros, senão os primeiros ficam com um jantar a mais. */
+    const totalDays = countDays(startInput.value, endInput.value);
+    const extra = totalDays % order.length;
+    if (extra) {
+      const per = Math.floor(totalDays / order.length);
+      const endings = [];
+      if (totalDays > extra) {
+        endings.push(formatDatePt(shiftDate(endInput.value, -extra)));
+      }
+      endings.push(formatDatePt(shiftDate(endInput.value, order.length - extra)));
+      errorEl.textContent =
+        "São " + totalDays + " jantares para " + order.length + " cozinheiros: " +
+        extra + (extra > 1 ? " ficavam" : " ficava") + " com " + (per + 1) +
+        " e os outros com " + per +
+        ". Para todos cozinharem o mesmo número de vezes, termina a " +
+        endings.join(" ou a ") + ".";
       return;
     }
 
