@@ -319,6 +319,14 @@ function makeBackend(db, fns) {
     async writeSwap(entries) {
       await update(ref(db, "cookOverrides"), entries);
     },
+    async clearSwaps(dayIds) {
+      if (!dayIds.length) return;
+      const entries = {};
+      dayIds.forEach((id) => {
+        entries[id] = null;
+      });
+      await update(ref(db, "cookOverrides"), entries);
+    },
     startMenuHistory(onMenus, onReviews) {
       onValue(
         ref(db, MENUS_BASE),
@@ -646,6 +654,12 @@ function openAdminPanel() {
   periodRow.append(startInput, sep, endInput);
   form.appendChild(periodRow);
 
+  const note = document.createElement("p");
+  note.className = "gate-sub";
+  note.textContent =
+    "Guardar gera a escala de novo, repartida o mais possível por igual; trocas de dia anteriores são limpas.";
+  form.appendChild(note);
+
   const errorEl = document.createElement("p");
   errorEl.className = "gate-error";
   form.appendChild(errorEl);
@@ -709,9 +723,13 @@ function openAdminPanel() {
     }
 
     saveBtn.disabled = true;
+    /* Limpar as trocas de dia antigas: referem-se à escala anterior e,
+       se ficassem, voltavam a aplicar-se por cima da rotação nova e
+       desequilibravam as contagens. */
     Promise.all([
       backend.writeCooks({ order, ts: Date.now() }),
-      backend.writePeriod({ startDate: startInput.value, endDate: endInput.value, ts: Date.now() })
+      backend.writePeriod({ startDate: startInput.value, endDate: endInput.value, ts: Date.now() }),
+      backend.clearSwaps(Object.keys(cookOverrides))
     ])
       .then(() => closeAdminPanel())
       .catch(() => {
