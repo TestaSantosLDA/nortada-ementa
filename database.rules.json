@@ -76,6 +76,42 @@
         }
       }
     },
+    "shoppingLists": {
+      ".read": "auth != null",
+      "$listId": {
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['name', 'ts'])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 100"
+        },
+        "createdBy": {
+          ".validate": "newData.isString()"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "items": {
+          "$itemId": {
+            ".validate": "newData.hasChildren(['name', 'done', 'ts'])",
+            "name": {
+              ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 200"
+            },
+            "done": {
+              ".validate": "newData.isBoolean()"
+            },
+            "ts": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
     "config": {
       ".read": "auth != null",
       ".write": "auth != null",

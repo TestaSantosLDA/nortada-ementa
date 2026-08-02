@@ -34,6 +34,8 @@ const GOOGLE_G_SVG =
 let menus = {};                  // { "2026-08-01": "Bacalhau à Brás", ... }
 let feedback = {};                // { dayId: { entryId: {type, stars, text, ts} } }
 let attendance = {};               // { dayId: { uid: {count, ts} } }
+let shoppingLists = {};            // { listId: {name, createdBy, ts, items: {itemId: {name, done, ts}}} }
+let activeTab = "escala";          // "escala" | "compras"
 let profiles = {};                 // { uid: {name, householdSize, ts} }
 let filter = null;                 // cozinheiro (uid) selecionado, ou null
 let backend = null;                // preenchido depois do login
@@ -59,6 +61,12 @@ const $appWrap = document.getElementById("app-wrap");
 const $panel = document.getElementById("day-panel");
 const $unconfigured = document.getElementById("unconfigured");
 const $adminPanel = document.getElementById("admin-panel");
+const $viewEscala = document.getElementById("view-escala");
+const $viewCompras = document.getElementById("view-compras");
+const $tabEscala = document.getElementById("tab-escala");
+const $tabCompras = document.getElementById("tab-compras");
+const $shopLists = document.getElementById("shop-lists");
+const $shopEmpty = document.getElementById("shop-empty");
 
 function setStatus(text, state) {
   $status.textContent = text;
@@ -296,6 +304,24 @@ function makeBackend(db, fns) {
         count,
         ts: Date.now()
       });
+    },
+    startShoppingLists(onRemote) {
+      onValue(
+        ref(db, "shoppingLists"),
+        (snap) => onRemote(snap.val() || {}),
+        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
+      );
+    },
+    async createShoppingList(name) {
+      const listRef = push(ref(db, "shoppingLists"));
+      await set(listRef, { name, createdBy: currentUser.uid, ts: Date.now() });
+    },
+    async addShoppingItem(listId, name) {
+      const itemRef = push(ref(db, "shoppingLists/" + listId + "/items"));
+      await set(itemRef, { name, done: false, ts: Date.now() });
+    },
+    async setShoppingItemDone(listId, itemId, done) {
+      await set(ref(db, "shoppingLists/" + listId + "/items/" + itemId + "/done"), done);
     },
     startProfiles(onRemote, onError) {
       onValue(
@@ -1272,6 +1298,173 @@ document.getElementById("copy").addEventListener("click", async () => {
 });
 
 /* =========================================================
+   Tabs (Escala / Lista de compras)
+   ========================================================= */
+
+function setActiveTab(tab) {
+  if (tab === activeTab) return;
+  activeTab = tab;
+
+  if (openPanelDay) closeDayPanel();
+  if (!$adminPanel.hidden) closeAdminPanel();
+
+  $viewEscala.hidden = tab !== "escala";
+  $viewCompras.hidden = tab !== "compras";
+  $tabEscala.setAttribute("aria-selected", tab === "escala" ? "true" : "false");
+  $tabCompras.setAttribute("aria-selected", tab === "compras" ? "true" : "false");
+}
+
+$tabEscala.addEventListener("click", () => setActiveTab("escala"));
+$tabCompras.addEventListener("click", () => setActiveTab("compras"));
+
+/* =========================================================
+   Listas de compras
+   ========================================================= */
+
+const shopListEls = new Map(); // listId -> { card, nameEl, itemsUl }
+
+function buildShopListCard(listId) {
+  const card = document.createElement("article");
+  card.className = "shop-list";
+
+  const nameEl = document.createElement("h3");
+  nameEl.className = "shop-list-name";
+  card.appendChild(nameEl);
+
+  const itemsUl = document.createElement("ul");
+  itemsUl.className = "shop-items";
+  card.appendChild(itemsUl);
+
+  const form = document.createElement("form");
+  form.className = "shop-add";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.maxLength = 200;
+  input.placeholder = "Adicionar item";
+
+  const btn = document.createElement("button");
+  btn.type = "submit";
+  btn.className = "shop-add-btn";
+  btn.textContent = "Adicionar";
+
+  form.append(input, btn);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const name = input.value.trim();
+    if (!name) return;
+    btn.disabled = true;
+    backend
+      .addShoppingItem(listId, name)
+      .then(() => {
+        input.value = "";
+      })
+      .catch(() => setStatus("Não foi possível adicionar o item.", "error"))
+      .finally(() => {
+        btn.disabled = false;
+        input.focus();
+      });
+  });
+  card.appendChild(form);
+
+  return { card, nameEl, itemsUl };
+}
+
+function renderShopItems(listId) {
+  const els = shopListEls.get(listId);
+  if (!els) return;
+
+  const items = Object.entries((shoppingLists[listId] || {}).items || {}).sort(
+    (a, b) => (a[1].ts || 0) - (b[1].ts || 0)
+  );
+  els.itemsUl.replaceChildren();
+
+  if (!items.length) {
+    const li = document.createElement("li");
+    li.className = "shop-empty-item";
+    li.textContent = "Ainda sem itens.";
+    els.itemsUl.appendChild(li);
+    return;
+  }
+
+  items.forEach(([itemId, item]) => {
+    const li = document.createElement("li");
+    li.className = "shop-item" + (item.done ? " done" : "");
+
+    const label = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!item.done;
+    cb.addEventListener("change", () => {
+      backend
+        .setShoppingItemDone(listId, itemId, cb.checked)
+        .catch(() => setStatus("Não foi possível guardar o item.", "error"));
+    });
+
+    const span = document.createElement("span");
+    span.textContent = item.name;
+
+    label.append(cb, span);
+    li.appendChild(label);
+    els.itemsUl.appendChild(li);
+  });
+}
+
+/* Re-render incremental: os cartões e formulários existentes mantêm o DOM
+   (não se perde texto a meio de escrita); só as listas de itens reconstroem. */
+function renderShoppingLists() {
+  const entries = Object.entries(shoppingLists).sort(
+    (a, b) => (b[1].ts || 0) - (a[1].ts || 0)
+  );
+
+  shopListEls.forEach((els, listId) => {
+    if (!shoppingLists[listId]) {
+      els.card.remove();
+      shopListEls.delete(listId);
+    }
+  });
+
+  $shopEmpty.hidden = entries.length > 0;
+
+  entries.forEach(([listId, list], idx) => {
+    let els = shopListEls.get(listId);
+    if (!els) {
+      els = buildShopListCard(listId);
+      shopListEls.set(listId, els);
+    }
+    els.nameEl.textContent = list.name || "";
+    renderShopItems(listId);
+
+    const inPlace = $shopLists.children[idx];
+    if (inPlace !== els.card) $shopLists.insertBefore(els.card, inPlace || null);
+  });
+}
+
+function applyRemoteShoppingLists(remote) {
+  shoppingLists = remote || {};
+  renderShoppingLists();
+}
+
+document.getElementById("shop-create").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const input = document.getElementById("shop-create-name");
+  const name = input.value.trim();
+  if (!name) return;
+
+  const btn = e.target.querySelector("button");
+  btn.disabled = true;
+  backend
+    .createShoppingList(name)
+    .then(() => {
+      input.value = "";
+    })
+    .catch(() => setStatus("Não foi possível criar a lista.", "error"))
+    .finally(() => {
+      btn.disabled = false;
+    });
+});
+
+/* =========================================================
    Arranque
    ========================================================= */
 
@@ -1311,6 +1504,8 @@ function startApp() {
     applyRemoteProfiles(remote);
     regenerateSchedule();
   }, onLoadError);
+
+  backend.startShoppingLists(applyRemoteShoppingLists);
 
   backend.startConfig(
     (periodConfig) => {

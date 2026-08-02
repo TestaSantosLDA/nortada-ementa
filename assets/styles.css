@@ -52,6 +52,75 @@ header.top{
 .status[data-state="error"]{color:var(--francisco)}
 .session{font-size:12px;color:var(--muted);margin:0}
 
+/* ---------- tabs ---------- */
+.tabs{display:flex;gap:8px;padding:16px 0 0}
+.tab{
+  appearance:none;cursor:pointer;
+  background:transparent;border:1px solid var(--line);border-radius:999px;
+  padding:8px 16px;font-family:var(--body);font-size:14px;font-weight:600;color:var(--muted);
+  transition:border-color .15s ease,background .15s ease,color .15s ease;
+}
+.tab:hover{border-color:#C9CFC6;color:var(--ink)}
+.tab[aria-selected="true"]{background:var(--ink);border-color:var(--ink);color:#fff}
+.tab:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+/* ---------- listas de compras ---------- */
+.shop-create{
+  display:flex;gap:10px;flex-wrap:wrap;
+  padding:20px 0;border-bottom:1px solid var(--line);
+}
+.shop-create input{
+  flex:1;min-width:220px;
+  font-family:var(--body);font-size:14px;color:var(--ink);
+  border:1px solid var(--line);border-radius:999px;background:var(--card);
+  padding:10px 16px;
+}
+.shop-create input::placeholder{color:#B3BCB6}
+.shop-create input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+.shop-empty{margin:24px 0 0;font-size:14px;color:var(--muted)}
+
+.shop-lists{
+  display:grid;gap:14px;margin-top:20px;
+  grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+}
+.shop-list{
+  background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:16px;display:flex;flex-direction:column;gap:10px;
+}
+.shop-list-name{
+  font-family:var(--display);font-weight:800;font-size:20px;
+  letter-spacing:-.02em;line-height:1.15;margin:0;
+}
+.shop-items{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.shop-empty-item{font-size:12.5px;color:var(--muted)}
+.shop-item label{
+  display:flex;align-items:center;gap:10px;cursor:pointer;
+  font-size:14px;color:var(--ink);
+  padding:7px 10px;border-radius:8px;background:var(--paper);
+}
+.shop-item input[type="checkbox"]{accent-color:var(--ink);width:16px;height:16px;flex:none;cursor:pointer}
+.shop-item.done span{text-decoration:line-through;color:var(--muted)}
+
+.shop-add{display:flex;gap:8px;margin-top:2px}
+.shop-add input{
+  flex:1;min-width:0;
+  font-family:var(--body);font-size:13px;color:var(--ink);
+  border:1px solid var(--line);border-radius:999px;background:var(--card);
+  padding:6px 12px;
+}
+.shop-add input::placeholder{color:#B3BCB6}
+.shop-add input:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.shop-add-btn{
+  appearance:none;cursor:pointer;flex:none;
+  background:transparent;border:1px solid var(--line);border-radius:999px;
+  padding:5px 12px;font-family:var(--body);font-size:12.5px;font-weight:600;color:var(--ink);
+  transition:border-color .15s ease,background .15s ease;
+}
+.shop-add-btn:hover{border-color:#C9CFC6;background:var(--paper)}
+.shop-add-btn:disabled{opacity:.5;cursor:default}
+.shop-add-btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
 /* ---------- filtro de pessoas ---------- */
 .people{
   display:flex;flex-wrap:wrap;gap:8px;

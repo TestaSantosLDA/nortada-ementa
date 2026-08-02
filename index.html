@@ -30,17 +30,39 @@
     </div>
   </header>
 
-  <nav class="people" id="people" aria-label="Filtrar por cozinheiro"></nav>
+  <nav class="tabs" aria-label="Vistas">
+    <button class="tab" id="tab-escala" aria-selected="true">Escala</button>
+    <button class="tab" id="tab-compras" aria-selected="false">Lista de compras</button>
+  </nav>
 
-  <main id="weeks"></main>
+  <div id="view-escala">
 
-  <footer class="foot">
-    <div class="foot-actions">
-      <button class="copy" id="copy">Copiar escala para o grupo</button>
-      <button class="admin-btn" id="admin-open">Administração</button>
-    </div>
-    <p class="note" id="mode-note"></p>
-  </footer>
+    <nav class="people" id="people" aria-label="Filtrar por cozinheiro"></nav>
+
+    <main id="weeks"></main>
+
+    <footer class="foot">
+      <div class="foot-actions">
+        <button class="copy" id="copy">Copiar escala para o grupo</button>
+        <button class="admin-btn" id="admin-open">Administração</button>
+      </div>
+      <p class="note" id="mode-note"></p>
+    </footer>
+
+  </div>
+
+  <div id="view-compras" hidden>
+
+    <form class="shop-create" id="shop-create">
+      <input type="text" id="shop-create-name" maxlength="100" placeholder="Nome da nova lista (ex: Compras da semana)">
+      <button type="submit" class="copy">Criar lista</button>
+    </form>
+
+    <p class="shop-empty" id="shop-empty" hidden>Ainda não há listas de compras. Cria a primeira.</p>
+
+    <div class="shop-lists" id="shop-lists"></div>
+
+  </div>
 
 </div>
 
