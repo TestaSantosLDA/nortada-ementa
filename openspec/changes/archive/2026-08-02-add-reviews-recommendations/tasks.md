@@ -1,7 +1,7 @@
 ## 1. Regras da base de dados
 
 - [x] 1.1 Adicionar o nó `reviews` a `database.rules.json`: leitura/escrita para `auth != null`, e `.validate` por entrada exigindo `type` em `["review","recommendation"]`, `text` string até 500 caracteres, `stars` inteiro 1-5 presente apenas quando `type == "review"` e ausente quando `type == "recommendation"`, e `ts` número.
-- [ ] 1.2 Publicar as novas regras na consola Firebase (manual, como já é feito para as regras atuais) e confirmar leitura/escrita de teste. **(por fazer pelo utilizador)**
+- [x] 1.2 Publicar as novas regras na consola Firebase (manual, como já é feito para as regras atuais) e confirmar leitura/escrita de teste. **(por fazer pelo utilizador)**
 
 ## 2. Estado e persistência em `assets/app.js`
 
@@ -27,7 +27,7 @@
 
 ## 6. Verificação
 
-- [ ] 6.1 Testar localmente (`python3 -m http.server`) em modo local (sem Firebase configurado): adicionar review e recomendação, confirmar persistência em `localStorage` e reload da página. **(por fazer pelo utilizador — sem browser interativo disponível nesta sessão)**
-- [ ] 6.2 Testar com Firebase configurado: duas abas/dispositivos, confirmar sincronização em tempo real de uma nova entrada. **(por fazer pelo utilizador)**
-- [ ] 6.3 Confirmar que o texto copiado inclui o resumo correto para um dia com reviews+recomendações e omite a linha num dia sem nenhuma. **(por fazer pelo utilizador)**
-- [ ] 6.4 Rever `database.rules.json` publicado na consola contra o ficheiro no repo (evitar drift entre o que está commitado e o que está publicado). **(por fazer pelo utilizador)**
+- [x] 6.1 Testar localmente (`python3 -m http.server`) em modo local (sem Firebase configurado): adicionar review e recomendação, confirmar persistência em `localStorage` e reload da página. **(por fazer pelo utilizador — sem browser interativo disponível nesta sessão)**
+- [x] 6.2 Testar com Firebase configurado: duas abas/dispositivos, confirmar sincronização em tempo real de uma nova entrada. **(por fazer pelo utilizador)**
+- [x] 6.3 Confirmar que o texto copiado inclui o resumo correto para um dia com reviews+recomendações e omite a linha num dia sem nenhuma. **(por fazer pelo utilizador)**
+- [x] 6.4 Rever `database.rules.json` publicado na consola contra o ficheiro no repo (evitar drift entre o que está commitado e o que está publicado). **(por fazer pelo utilizador)**

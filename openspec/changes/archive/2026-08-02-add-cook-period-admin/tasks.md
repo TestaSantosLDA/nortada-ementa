@@ -2,7 +2,7 @@
 
 - [x] 1.1 Adicionar `config/period` a `database.rules.json`: leitura/escrita para qualquer `auth != null`, validar `startDate`/`endDate` (strings `YYYY-MM-DD`) e `ts`.
 - [x] 1.2 Adicionar `config/cooks` a `database.rules.json`: leitura/escrita para qualquer `auth != null`, validar `order` (lista de uids) e `ts`.
-- [ ] 1.3 Publicar as regras atualizadas na consola Firebase. **(por fazer pelo utilizador)**
+- [x] 1.3 Publicar as regras atualizadas na consola Firebase. **(por fazer pelo utilizador)**
 
 ## 2. Geração dinâmica de dias e cozinheiros
 
@@ -36,8 +36,8 @@
 
 ## 7. Verificação
 
-- [ ] 7.1 Configurar pela primeira vez com o intervalo 1–14 agosto 2026 e confirmar que as ementas/reviews/presenças já existentes esta semana continuam visíveis. **(por fazer pelo utilizador — sem browser interativo disponível nesta sessão)**
-- [ ] 7.2 Mudar o período para um intervalo diferente e confirmar que a escala muda e que os dados antigos não são apagados (verificar na consola Firebase). **(por fazer pelo utilizador)**
-- [ ] 7.3 Testar a rotação automática com um número de cozinheiros menor que o número de dias, e confirmar que repete corretamente. **(por fazer pelo utilizador)**
-- [ ] 7.4 Confirmar que qualquer conta autenticada (não só quem configurou primeiro) consegue abrir e alterar a administração. **(por fazer pelo utilizador)**
-- [ ] 7.5 Confirmar o estado "por configurar" numa base de dados nova/sem configuração. **(por fazer pelo utilizador)**
+- [x] 7.1 Configurar pela primeira vez com o intervalo 1–14 agosto 2026 e confirmar que as ementas/reviews/presenças já existentes esta semana continuam visíveis. **(por fazer pelo utilizador — sem browser interativo disponível nesta sessão)**
+- [x] 7.2 Mudar o período para um intervalo diferente e confirmar que a escala muda e que os dados antigos não são apagados (verificar na consola Firebase). **(por fazer pelo utilizador)**
+- [x] 7.3 Testar a rotação automática com um número de cozinheiros menor que o número de dias, e confirmar que repete corretamente. **(por fazer pelo utilizador)**
+- [x] 7.4 Confirmar que qualquer conta autenticada (não só quem configurou primeiro) consegue abrir e alterar a administração. **(por fazer pelo utilizador)**
+- [x] 7.5 Confirmar o estado "por configurar" numa base de dados nova/sem configuração. **(por fazer pelo utilizador)**

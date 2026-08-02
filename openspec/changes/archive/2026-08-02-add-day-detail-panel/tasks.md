@@ -22,7 +22,7 @@
 
 ## 5. Verificação
 
-- [ ] 5.1 Confirmar que clicar no cartão abre o painel, e que clicar na textarea/formulário de feedback/stepper não abre. **(por fazer pelo utilizador — sem browser interativo disponível nesta sessão)**
-- [ ] 5.2 Confirmar que editar a ementa dentro do painel atualiza o mesmo valor no cartão depois de fechar (sem duplicar nem perder texto). **(por fazer pelo utilizador)**
-- [ ] 5.3 Confirmar que as sugestões aparecem só quando não há ementa, e que "Usar esta sugestão" preenche o campo corretamente. **(por fazer pelo utilizador)**
-- [ ] 5.4 Confirmar que fechar com Escape, backdrop e botão funcionam todos. **(por fazer pelo utilizador)**
+- [x] 5.1 Confirmar que clicar no cartão abre o painel, e que clicar na textarea/formulário de feedback/stepper não abre. **(por fazer pelo utilizador — sem browser interativo disponível nesta sessão)**
+- [x] 5.2 Confirmar que editar a ementa dentro do painel atualiza o mesmo valor no cartão depois de fechar (sem duplicar nem perder texto). **(por fazer pelo utilizador)**
+- [x] 5.3 Confirmar que as sugestões aparecem só quando não há ementa, e que "Usar esta sugestão" preenche o campo corretamente. **(por fazer pelo utilizador)**
+- [x] 5.4 Confirmar que fechar com Escape, backdrop e botão funcionam todos. **(por fazer pelo utilizador)**

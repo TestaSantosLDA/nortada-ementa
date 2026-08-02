@@ -28,4 +28,4 @@
 
 - [x] 6.1 Verificar sintaxe (`node --check`, JSON das regras) e carregar a app localmente sem erros de consola.
 - [x] 6.2 Commit e push para `main` (deploy via GitHub Pages).
-- [ ] 6.3 Testar com duas contas em dois dispositivos: criar lista, adicionar itens à lista do outro, marcar comprado, e confirmar sincronização em tempo real. **(por fazer pelo utilizador — login Google não funciona em browser automatizado)**
+- [x] 6.3 Testar com duas contas em dois dispositivos: criar lista, adicionar itens à lista do outro, marcar comprado, e confirmar sincronização em tempo real. **(por fazer pelo utilizador — login Google não funciona em browser automatizado)**

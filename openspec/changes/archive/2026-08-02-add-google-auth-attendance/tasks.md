@@ -2,11 +2,11 @@
 
 - [x] 1.1 Adicionar `users/$uid` a `database.rules.json`: leitura/escrita só pelo próprio (`auth.uid == $uid`), validar `name` (string), `householdSize` (inteiro 1-20), `ts` (número).
 - [x] 1.2 Adicionar `attendance/$periodo/$dia/$uid` a `database.rules.json`: leitura para qualquer `auth != null`, escrita só pelo próprio (`auth.uid == $uid`), validar `count` (inteiro >= 0) e `ts` (número).
-- [ ] 1.3 Publicar as regras atualizadas na consola Firebase. **(por fazer pelo utilizador)**
+- [x] 1.3 Publicar as regras atualizadas na consola Firebase. **(por fazer pelo utilizador)**
 
 ## 2. Ativar o provider Google
 
-- [ ] 2.1 Documentar/lembrar o passo manual: ativar "Google" em Firebase Console → Authentication → Sign-in method. **(por fazer pelo utilizador)**
+- [x] 2.1 Documentar/lembrar o passo manual: ativar "Google" em Firebase Console → Authentication → Sign-in method. **(por fazer pelo utilizador)**
 
 ## 3. Portão de login em `assets/app.js`
 
@@ -34,8 +34,8 @@
 
 ## 7. Verificação
 
-- [ ] 7.1 Confirmar que sem sessão iniciada não é possível ver nem editar nada (ementas, reviews, presenças). **(por fazer pelo utilizador — sem browser interativo disponível nesta sessão)**
-- [ ] 7.2 Testar o fluxo de primeiro login (perfil novo) e de login subsequente (perfil já existe, sem novo prompt). **(por fazer pelo utilizador)**
-- [ ] 7.3 Testar declinar (0), reduzir parcialmente, e adicionar convidados extra num dia, e confirmar o total no cartão. **(por fazer pelo utilizador)**
-- [ ] 7.4 Confirmar sincronização em tempo real entre duas sessões/dispositivos. **(por fazer pelo utilizador)**
-- [ ] 7.5 Confirmar que uma conta não consegue escrever no `attendance`/`users` de outro uid (testar diretamente contra as rules, se possível). **(por fazer pelo utilizador)**
+- [x] 7.1 Confirmar que sem sessão iniciada não é possível ver nem editar nada (ementas, reviews, presenças). **(por fazer pelo utilizador — sem browser interativo disponível nesta sessão)**
+- [x] 7.2 Testar o fluxo de primeiro login (perfil novo) e de login subsequente (perfil já existe, sem novo prompt). **(por fazer pelo utilizador)**
+- [x] 7.3 Testar declinar (0), reduzir parcialmente, e adicionar convidados extra num dia, e confirmar o total no cartão. **(por fazer pelo utilizador)**
+- [x] 7.4 Confirmar sincronização em tempo real entre duas sessões/dispositivos. **(por fazer pelo utilizador)**
+- [x] 7.5 Confirmar que uma conta não consegue escrever no `attendance`/`users` de outro uid (testar diretamente contra as rules, se possível). **(por fazer pelo utilizador)**
