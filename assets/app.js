@@ -1275,6 +1275,23 @@ document.getElementById("copy").addEventListener("click", async () => {
    Arranque
    ========================================================= */
 
+/* Quem faz login entra automaticamente na rotação de cozinheiros
+   (só quando já existe uma escala configurada). */
+let enrollingSelf = false;
+
+function enrollSelfAsCook() {
+  const cooks = scheduleConfig.cooks;
+  if (!cooks || !cooks.order || !cooks.order.length) return;
+  if (cooks.order.includes(currentUser.uid) || enrollingSelf) return;
+  enrollingSelf = true;
+  backend
+    .writeCooks({ order: cooks.order.concat(currentUser.uid), ts: Date.now() })
+    .catch(() => {})
+    .finally(() => {
+      enrollingSelf = false;
+    });
+}
+
 function startApp() {
   $gate.hidden = true;
   renderScheduleMessage("A carregar…");
@@ -1302,6 +1319,7 @@ function startApp() {
     },
     (cooksConfig) => {
       scheduleConfig.cooks = cooksConfig;
+      enrollSelfAsCook();
       regenerateSchedule();
     },
     onLoadError
@@ -1355,7 +1373,14 @@ async function boot() {
       return;
     }
 
-    currentUser = { uid: user.uid, name: user.displayName || user.email || "Conta Google" };
+    const googleInfo = (user.providerData || []).find((p) => p && p.providerId === "google.com");
+    const authName =
+      user.displayName ||
+      (googleInfo && googleInfo.displayName) ||
+      user.email ||
+      (googleInfo && googleInfo.email) ||
+      null;
+    currentUser = { uid: user.uid, name: authName || "Conta Google" };
 
     let profile;
     try {
@@ -1363,6 +1388,18 @@ async function boot() {
     } catch (e) {
       renderGateError("Não foi possível ligar à base de dados.");
       return;
+    }
+
+    /* O nome guardado no primeiro login pode ter ficado "Conta Google"
+       (o displayName ainda não estava disponível). Corrige-o em cada login. */
+    if (profile && authName && profile.name !== authName) {
+      const healed = { name: authName, householdSize: profile.householdSize, ts: Date.now() };
+      try {
+        await backend.writeProfile(user.uid, healed);
+        profile = healed;
+      } catch (e) {
+        // se falhar, segue com o nome antigo
+      }
     }
 
     if (!profile) {
