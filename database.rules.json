@@ -76,6 +76,28 @@
         }
       }
     },
+    "cookOverrides": {
+      ".read": "auth != null",
+      "$dia": {
+        ".write": "auth != null",
+        ".validate": "newData.hasChildren(['uid', 'by', 'ts'])",
+        "uid": {
+          ".validate": "newData.isString()"
+        },
+        "prevUid": {
+          ".validate": "newData.isString()"
+        },
+        "by": {
+          ".validate": "newData.isString()"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
     "shoppingLists": {
       ".read": "auth != null",
       "$listId": {

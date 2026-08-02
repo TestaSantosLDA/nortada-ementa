@@ -293,6 +293,21 @@ header.top{
 }
 .suggestion-use:hover{border-color:#C9CFC6;background:var(--paper)}
 
+/* ---------- troca de cozinheiro ---------- */
+.swap{
+  margin:12px 12px 0;padding:10px;border:1px dashed var(--line);border-radius:10px;
+  background:var(--paper);display:flex;flex-direction:column;gap:8px;
+}
+.swap-note{margin:0;font-size:13px;font-weight:600;color:var(--ink)}
+.swap-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.swap-select{
+  flex:1;min-width:180px;
+  font-family:var(--body);font-size:13px;color:var(--ink);
+  border:1px solid var(--line);border-radius:8px;background:var(--card);
+  padding:6px 8px;
+}
+.swap-select:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
 /* ---------- semanas ---------- */
 .week{margin-top:32px}
 .week-label{

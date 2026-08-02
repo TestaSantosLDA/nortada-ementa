@@ -36,6 +36,7 @@ let feedback = {};                // { dayId: { entryId: {type, stars, text, ts}
 let attendance = {};               // { dayId: { uid: {count, ts} } }
 let shoppingLists = {};            // { listId: {name, createdBy, ts, items: {itemId: {name, done, ts}}} }
 let activeTab = "escala";          // "escala" | "compras"
+let cookOverrides = {};            // { dayId: {uid, prevUid, by, ts} } — trocas de dia
 let allMenus = {};                 // { periodo: { dayId: texto } } — histórico completo
 let allReviews = {};               // { periodo: { dayId: { entryId: entry } } }
 let menuIndex = null;              // Map norm -> {display, lastDate, starSum, starCount} (lazy)
@@ -308,6 +309,16 @@ function makeBackend(db, fns) {
         ts: Date.now()
       });
     },
+    startCookOverrides(onRemote) {
+      onValue(
+        ref(db, "cookOverrides"),
+        (snap) => onRemote(snap.val() || {}),
+        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
+      );
+    },
+    async writeSwap(entries) {
+      await update(ref(db, "cookOverrides"), entries);
+    },
     startMenuHistory(onMenus, onReviews) {
       onValue(
         ref(db, MENUS_BASE),
@@ -430,6 +441,13 @@ function regenerateScheduleUnsafe(period, cooks) {
 
   PEOPLE = buildPeople(cooks.order, profiles);
   DAYS = buildDays(period.startDate, period.endDate, cooks.order);
+
+  /* Trocas de dia: override por data, com fallback se o cozinheiro
+     do override já não estiver na rotação. */
+  DAYS.forEach((day) => {
+    const override = cookOverrides[day.id];
+    if (override && PEOPLE[override.uid]) day.who = override.uid;
+  });
 
   const newPeriodo = period.startDate.slice(0, 7);
   if (newPeriodo !== PERIODO) {
@@ -1143,6 +1161,75 @@ function updatePanelSuggestions() {
   }
 }
 
+/* Secção de troca de cozinheiro — só existe no painel, para dias de hoje
+   em diante. A troca é sempre um par de datas e escreve os dois overrides
+   numa única operação. */
+function buildSwapSection(d) {
+  const today = todayId();
+  if (d.id < today) return null;
+
+  const options = DAYS.filter((other) => other.id !== d.id && other.id >= today);
+  if (!options.length) return null;
+
+  const wrap = document.createElement("div");
+  wrap.className = "swap";
+
+  const title = document.createElement("h3");
+  title.className = "suggestions-title";
+  title.textContent = "Trocar cozinheiro";
+  wrap.appendChild(title);
+
+  const override = cookOverrides[d.id];
+  if (override && PEOPLE[override.uid]) {
+    const note = document.createElement("p");
+    note.className = "swap-note";
+    const fromName = (profiles[override.prevUid] || {}).name || "?";
+    const toName = (profiles[override.uid] || {}).name || "?";
+    note.textContent = "Dia trocado: " + fromName + " ⇄ " + toName;
+    wrap.appendChild(note);
+  }
+
+  const row = document.createElement("div");
+  row.className = "swap-row";
+
+  const select = document.createElement("select");
+  select.className = "swap-select";
+  options.forEach((other) => {
+    const opt = document.createElement("option");
+    opt.value = other.id;
+    const p = PEOPLE[other.who];
+    opt.textContent =
+      other.num + "/" + other.id.split("-")[1] + " (" + SHORT_WD[other.wd] + ") — " +
+      (p ? p.name : "?");
+    select.appendChild(opt);
+  });
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "suggestion-use";
+  btn.textContent = "Trocar";
+  btn.addEventListener("click", () => {
+    const other = DAYS.find((x) => x.id === select.value);
+    if (!other || other.who === d.who) return;
+
+    btn.disabled = true;
+    const now = Date.now();
+    const entries = {};
+    entries[d.id] = { uid: other.who, prevUid: d.who, by: currentUser.uid, ts: now };
+    entries[other.id] = { uid: d.who, prevUid: other.who, by: currentUser.uid, ts: now };
+    backend
+      .writeSwap(entries)
+      .catch(() => {
+        setStatus("Não foi possível trocar.", "error");
+        btn.disabled = false;
+      });
+  });
+
+  row.append(select, btn);
+  wrap.appendChild(row);
+  return wrap;
+}
+
 function openDayPanel(d, card) {
   if (openPanelDay && openPanelDay.dayId === d.id) return;
   if (openPanelDay) closeDayPanel();
@@ -1186,6 +1273,10 @@ function openDayPanel(d, card) {
   if (suggestionsEl) sheet.appendChild(suggestionsEl);
 
   sheet.appendChild(menuEl);
+
+  const swapEl = buildSwapSection(d);
+  if (swapEl) sheet.appendChild(swapEl);
+
   sheet.appendChild(feedbackEl);
 
   $panel.append(backdrop, sheet);
@@ -1725,6 +1816,10 @@ function startApp() {
 
   backend.startShoppingLists(applyRemoteShoppingLists);
   backend.startMenuHistory(applyRemoteAllMenus, applyRemoteAllReviews);
+  backend.startCookOverrides((remote) => {
+    cookOverrides = remote || {};
+    regenerateSchedule();
+  });
 
   backend.startConfig(
     (periodConfig) => {
