@@ -237,9 +237,17 @@ function makeBackend(db, fns) {
   let unsubAttendance = null;
 
   return {
-    startConfig(onPeriod, onCooks) {
-      onValue(configPeriodNode, (snap) => onPeriod(snap.exists() ? snap.val() : null));
-      onValue(configCooksNode, (snap) => onCooks(snap.exists() ? snap.val() : null));
+    startConfig(onPeriod, onCooks, onError) {
+      onValue(
+        configPeriodNode,
+        (snap) => onPeriod(snap.exists() ? snap.val() : null),
+        (err) => onError(err)
+      );
+      onValue(
+        configCooksNode,
+        (snap) => onCooks(snap.exists() ? snap.val() : null),
+        (err) => onError(err)
+      );
     },
     async writePeriod(period) {
       await set(configPeriodNode, period);
@@ -289,11 +297,14 @@ function makeBackend(db, fns) {
         ts: Date.now()
       });
     },
-    startProfiles(onRemote) {
+    startProfiles(onRemote, onError) {
       onValue(
         usersNode,
         (snap) => onRemote(snap.val() || {}),
-        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
+        (err) => {
+          setStatus("Sem ligação à base de dados: " + err.code, "error");
+          if (onError) onError(err);
+        }
       );
     },
     async writeProfile(uid, profile) {
@@ -362,6 +373,17 @@ function regenerateSchedule() {
     return;
   }
 
+  try {
+    regenerateScheduleUnsafe(period, cooks);
+  } catch (e) {
+    renderScheduleMessage(
+      "Não foi possível montar a escala",
+      "A configuração guardada parece inválida. Abre a administração e confirma o período e os cozinheiros."
+    );
+  }
+}
+
+function regenerateScheduleUnsafe(period, cooks) {
   $unconfigured.hidden = true;
   $appWrap.hidden = false;
 
@@ -385,6 +407,38 @@ function regenerateSchedule() {
 
   renderPeople();
   renderWeeks();
+}
+
+/* =========================================================
+   Mensagens de carregamento/erro (antes de saber se há configuração)
+   ========================================================= */
+
+function renderScheduleMessage(title, message) {
+  $appWrap.hidden = true;
+  $unconfigured.hidden = false;
+  $unconfigured.replaceChildren();
+
+  const card = document.createElement("div");
+  card.className = "gate-card";
+
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "gate-eyebrow";
+  eyebrow.textContent = "Escala de jantares";
+
+  const h1 = document.createElement("h1");
+  h1.className = "gate-title";
+  h1.textContent = title;
+
+  card.append(eyebrow, h1);
+
+  if (message) {
+    const p = document.createElement("p");
+    p.className = "gate-error";
+    p.textContent = message;
+    card.appendChild(p);
+  }
+
+  $unconfigured.appendChild(card);
 }
 
 /* =========================================================
@@ -1223,15 +1277,23 @@ document.getElementById("copy").addEventListener("click", async () => {
 
 function startApp() {
   $gate.hidden = true;
+  renderScheduleMessage("A carregar…");
 
   $session.textContent = "A usar como " + currentUser.name;
   $note.textContent =
     "As ementas, reviews e presenças ficam guardadas e sincronizam em tempo real.";
 
+  const onLoadError = (err) => {
+    renderScheduleMessage(
+      "Não foi possível carregar a escala",
+      "Erro: " + (err && err.code ? err.code : "desconhecido") + ". Recarrega a página para tentar de novo."
+    );
+  };
+
   backend.startProfiles((remote) => {
     applyRemoteProfiles(remote);
     regenerateSchedule();
-  });
+  }, onLoadError);
 
   backend.startConfig(
     (periodConfig) => {
@@ -1241,7 +1303,8 @@ function startApp() {
     (cooksConfig) => {
       scheduleConfig.cooks = cooksConfig;
       regenerateSchedule();
-    }
+    },
+    onLoadError
   );
 
   setStatus("");
