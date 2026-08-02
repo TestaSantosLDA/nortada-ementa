@@ -75,6 +75,42 @@
           }
         }
       }
+    },
+    "config": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "period": {
+        ".validate": "newData.hasChildren(['startDate', 'endDate', 'ts'])",
+        "startDate": {
+          ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)"
+        },
+        "endDate": {
+          ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/)"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      "cooks": {
+        ".validate": "newData.hasChildren(['order', 'ts'])",
+        "order": {
+          "$index": {
+            ".validate": "newData.isString()"
+          }
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      },
+      "$other": {
+        ".validate": false
+      }
     }
   }
 }

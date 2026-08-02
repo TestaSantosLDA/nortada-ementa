@@ -1,43 +1,23 @@
 import { firebaseConfig, DB_PATH } from "./firebase-config.js";
 
 /* =========================================================
-   Dados da escala
+   Constantes
    ========================================================= */
 
-const PEOPLE = {
-  francisco: { name: "Francisco", color: "var(--francisco)" },
-  luis:      { name: "Luís",      color: "var(--luis)" },
-  afonso:    { name: "Afonso",    color: "var(--afonso)" },
-  ines:      { name: "Inês",      color: "var(--ines)" },
-  joao:      { name: "João",      color: "var(--joao)" }
-};
-
-const DAYS = [
-  { id: "2026-08-01", num: "01", wd: "Sábado",  who: "francisco" },
-  { id: "2026-08-02", num: "02", wd: "Domingo", who: "luis" },
-  { id: "2026-08-03", num: "03", wd: "Segunda", who: "afonso" },
-  { id: "2026-08-04", num: "04", wd: "Terça",   who: "ines" },
-  { id: "2026-08-05", num: "05", wd: "Quarta",  who: "joao" },
-  { id: "2026-08-06", num: "06", wd: "Quinta",  who: "luis" },
-  { id: "2026-08-07", num: "07", wd: "Sexta",   who: "francisco" },
-  { id: "2026-08-08", num: "08", wd: "Sábado",  who: "ines" },
-  { id: "2026-08-09", num: "09", wd: "Domingo", who: "joao" },
-  { id: "2026-08-10", num: "10", wd: "Segunda", who: "afonso" },
-  { id: "2026-08-11", num: "11", wd: "Terça",   who: "francisco" },
-  { id: "2026-08-12", num: "12", wd: "Quarta",  who: "luis" },
-  { id: "2026-08-13", num: "13", wd: "Quinta",  who: "ines" },
-  { id: "2026-08-14", num: "14", wd: "Sexta",   who: "joao" }
-];
+const WEEKDAY_NAMES = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
 
 const SHORT_WD = {
   "Sábado": "Sáb", "Domingo": "Dom", "Segunda": "Seg",
   "Terça": "Ter", "Quarta": "Qua", "Quinta": "Qui", "Sexta": "Sex"
 };
 
+const COOK_PALETTE = [
+  "#C1462F", "#2F6F5E", "#2C5A8C", "#8A4A72",
+  "#B37C0B", "#5C6B4B", "#6B5CA5", "#A6572E"
+];
+
 const MAX_LEN = 500;
-const PERIODO = DB_PATH.split("/")[1];
-const REVIEWS_PATH = "reviews/" + PERIODO;
-const ATTENDANCE_PATH = "attendance/" + PERIODO;
+const MENUS_BASE = DB_PATH.split("/")[0];
 
 const GOOGLE_G_SVG =
   '<svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">' +
@@ -55,10 +35,15 @@ let menus = {};                  // { "2026-08-01": "Bacalhau à Brás", ... }
 let feedback = {};                // { dayId: { entryId: {type, stars, text, ts} } }
 let attendance = {};               // { dayId: { uid: {count, ts} } }
 let profiles = {};                 // { uid: {name, householdSize, ts} }
-let filter = null;                 // pessoa selecionada, ou null
+let filter = null;                 // cozinheiro (uid) selecionado, ou null
 let backend = null;                // preenchido depois do login
 let currentUser = null;            // { uid, name }
 let openPanelDay = null;            // { dayId, card, sections: {attendance, menu, feedback}, sheet, suggestionsEl }
+
+let scheduleConfig = { period: null, cooks: null }; // { period: {startDate,endDate}, cooks: {order} }
+let PERIODO = null;
+let PEOPLE = {};                   // uid -> { name, color }
+let DAYS = [];                     // [{ id, num, wd, who: uid }]
 
 const textareas = new Map();       // dayId -> elemento
 const feedbackLists = new Map();   // dayId -> elemento <ul>
@@ -68,9 +53,12 @@ const attendanceControls = new Map(); // dayId -> { render() }
 const $status = document.getElementById("status");
 const $note = document.getElementById("mode-note");
 const $session = document.getElementById("session");
+const $subtitle = document.getElementById("subtitle");
 const $gate = document.getElementById("gate");
 const $appWrap = document.getElementById("app-wrap");
 const $panel = document.getElementById("day-panel");
+const $unconfigured = document.getElementById("unconfigured");
+const $adminPanel = document.getElementById("admin-panel");
 
 function setStatus(text, state) {
   $status.textContent = text;
@@ -91,6 +79,11 @@ function isConfigured() {
   return !String(firebaseConfig.apiKey || "").includes("COLOCAR_AQUI");
 }
 
+function formatDatePt(iso) {
+  const parts = iso.split("-");
+  return parts[2] + "/" + parts[1];
+}
+
 /* =========================================================
    Portão de entrada (Google Sign-In)
    ========================================================= */
@@ -99,6 +92,7 @@ function clearGate() {
   $gate.replaceChildren();
   $gate.hidden = false;
   $appWrap.hidden = true;
+  $unconfigured.hidden = true;
 }
 
 function renderGateLogin(onClick) {
@@ -232,33 +226,68 @@ function renderProfilePrompt(name, onSubmit) {
 
 function makeBackend(db, fns) {
   const { ref, onValue, update, push, set, get } = fns;
-  const node = ref(db, DB_PATH);
-  const reviewsNode = ref(db, REVIEWS_PATH);
   const usersNode = ref(db, "users");
-  const attendanceNode = ref(db, ATTENDANCE_PATH);
+  const configPeriodNode = ref(db, "config/period");
+  const configCooksNode = ref(db, "config/cooks");
+
+  let currentPeriodo = null;
+  let menusNode = null;
+  let unsubMenus = null;
+  let unsubReviews = null;
+  let unsubAttendance = null;
 
   return {
-    start(onRemote) {
-      onValue(
-        node,
-        (snap) => onRemote(snap.val() || {}),
+    startConfig(onPeriod, onCooks) {
+      onValue(configPeriodNode, (snap) => onPeriod(snap.exists() ? snap.val() : null));
+      onValue(configCooksNode, (snap) => onCooks(snap.exists() ? snap.val() : null));
+    },
+    async writePeriod(period) {
+      await set(configPeriodNode, period);
+    },
+    async writeCooks(cooks) {
+      await set(configCooksNode, cooks);
+    },
+    startScheduleData(periodo, handlers) {
+      if (periodo === currentPeriodo) return;
+      currentPeriodo = periodo;
+
+      if (unsubMenus) unsubMenus();
+      if (unsubReviews) unsubReviews();
+      if (unsubAttendance) unsubAttendance();
+
+      menusNode = ref(db, MENUS_BASE + "/" + periodo);
+      const reviewsNode = ref(db, "reviews/" + periodo);
+      const attendanceNode = ref(db, "attendance/" + periodo);
+
+      unsubMenus = onValue(
+        menusNode,
+        (snap) => handlers.onMenus(snap.val() || {}),
+        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
+      );
+      unsubReviews = onValue(
+        reviewsNode,
+        (snap) => handlers.onFeedback(snap.val() || {}),
+        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
+      );
+      unsubAttendance = onValue(
+        attendanceNode,
+        (snap) => handlers.onAttendance(snap.val() || {}),
         (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
       );
     },
     async write(dayId, value) {
-      await update(node, { [dayId]: value });
-    },
-    startFeedback(onRemote) {
-      onValue(
-        reviewsNode,
-        (snap) => onRemote(snap.val() || {}),
-        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
-      );
+      await update(menusNode, { [dayId]: value });
     },
     async writeFeedback(dayId, entry) {
-      const entryRef = push(ref(db, REVIEWS_PATH + "/" + dayId));
+      const entryRef = push(ref(db, "reviews/" + currentPeriodo + "/" + dayId));
       await set(entryRef, entry);
       return entryRef.key;
+    },
+    async writeAttendance(dayId, count) {
+      await set(ref(db, "attendance/" + currentPeriodo + "/" + dayId + "/" + currentUser.uid), {
+        count,
+        ts: Date.now()
+      });
     },
     startProfiles(onRemote) {
       onValue(
@@ -266,19 +295,6 @@ function makeBackend(db, fns) {
         (snap) => onRemote(snap.val() || {}),
         (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
       );
-    },
-    startAttendance(onRemote) {
-      onValue(
-        attendanceNode,
-        (snap) => onRemote(snap.val() || {}),
-        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
-      );
-    },
-    async writeAttendance(dayId, count) {
-      await set(ref(db, ATTENDANCE_PATH + "/" + dayId + "/" + currentUser.uid), {
-        count,
-        ts: Date.now()
-      });
     },
     async writeProfile(uid, profile) {
       await set(ref(db, "users/" + uid), profile);
@@ -291,6 +307,268 @@ function makeBackend(db, fns) {
 }
 
 /* =========================================================
+   Geração da escala a partir da configuração
+   ========================================================= */
+
+function cookColor(index) {
+  return COOK_PALETTE[index % COOK_PALETTE.length];
+}
+
+function buildPeople(cookOrder, profilesMap) {
+  const map = {};
+  cookOrder.forEach((uid, idx) => {
+    const profile = profilesMap[uid];
+    map[uid] = {
+      name: profile ? profile.name : "Conta",
+      color: cookColor(idx)
+    };
+  });
+  return map;
+}
+
+function buildDays(startDate, endDate, cookOrder) {
+  const days = [];
+  const cursor = new Date(startDate + "T00:00:00");
+  const end = new Date(endDate + "T00:00:00");
+  let i = 0;
+  while (cursor <= end) {
+    const id = [
+      cursor.getFullYear(),
+      String(cursor.getMonth() + 1).padStart(2, "0"),
+      String(cursor.getDate()).padStart(2, "0")
+    ].join("-");
+    days.push({
+      id,
+      num: String(cursor.getDate()).padStart(2, "0"),
+      wd: WEEKDAY_NAMES[cursor.getDay()],
+      who: cookOrder[i % cookOrder.length]
+    });
+    cursor.setDate(cursor.getDate() + 1);
+    i++;
+  }
+  return days;
+}
+
+function regenerateSchedule() {
+  if (openPanelDay) closeDayPanel();
+
+  const { period, cooks } = scheduleConfig;
+  const hasCooks = cooks && cooks.order && cooks.order.length;
+
+  if (!period || !hasCooks) {
+    $appWrap.hidden = true;
+    $unconfigured.hidden = false;
+    renderUnconfigured();
+    return;
+  }
+
+  $unconfigured.hidden = true;
+  $appWrap.hidden = false;
+
+  PEOPLE = buildPeople(cooks.order, profiles);
+  DAYS = buildDays(period.startDate, period.endDate, cooks.order);
+
+  const newPeriodo = period.startDate.slice(0, 7);
+  if (newPeriodo !== PERIODO) {
+    PERIODO = newPeriodo;
+    backend.startScheduleData(PERIODO, {
+      onMenus: applyRemote,
+      onFeedback: applyRemoteFeedback,
+      onAttendance: applyRemoteAttendance
+    });
+  }
+
+  $subtitle.textContent =
+    formatDatePt(period.startDate) + " a " + formatDatePt(period.endDate) +
+    " · " + cooks.order.length + (cooks.order.length > 1 ? " cozinheiros" : " cozinheiro") +
+    " · " + DAYS.length + (DAYS.length > 1 ? " jantares" : " jantar");
+
+  renderPeople();
+  renderWeeks();
+}
+
+/* =========================================================
+   Estado "por configurar"
+   ========================================================= */
+
+function renderUnconfigured() {
+  $unconfigured.replaceChildren();
+  const card = document.createElement("div");
+  card.className = "gate-card";
+
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "gate-eyebrow";
+  eyebrow.textContent = "Escala de jantares";
+
+  const title = document.createElement("h1");
+  title.className = "gate-title";
+  title.textContent = "Ainda não há uma escala configurada";
+
+  const sub = document.createElement("p");
+  sub.className = "gate-sub";
+  sub.textContent = "Escolhe quem cozinha e o intervalo de datas para começar.";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "gate-google";
+  btn.textContent = "Abrir administração";
+  btn.addEventListener("click", openAdminPanel);
+
+  card.append(eyebrow, title, sub, btn);
+  $unconfigured.appendChild(card);
+}
+
+/* =========================================================
+   Administração (cozinheiros + período)
+   ========================================================= */
+
+function openAdminPanel() {
+  if (openPanelDay) closeDayPanel();
+
+  $adminPanel.replaceChildren();
+
+  const backdrop = document.createElement("div");
+  backdrop.className = "panel-backdrop";
+  backdrop.addEventListener("click", closeAdminPanel);
+
+  const sheet = document.createElement("div");
+  sheet.className = "panel-sheet";
+
+  const head = document.createElement("div");
+  head.className = "panel-head";
+
+  const title = document.createElement("h2");
+  title.className = "gate-title admin-title";
+  title.textContent = "Administração";
+  head.appendChild(title);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "panel-close";
+  closeBtn.setAttribute("aria-label", "Fechar");
+  closeBtn.textContent = "×";
+  closeBtn.addEventListener("click", closeAdminPanel);
+  head.appendChild(closeBtn);
+
+  sheet.appendChild(head);
+
+  const form = document.createElement("form");
+  form.className = "admin-form";
+
+  const cooksLabel = document.createElement("h3");
+  cooksLabel.className = "suggestions-title";
+  cooksLabel.textContent = "Quem cozinha";
+  form.appendChild(cooksLabel);
+
+  const cooksList = document.createElement("div");
+  cooksList.className = "admin-cooks";
+
+  const existingOrder = (scheduleConfig.cooks && scheduleConfig.cooks.order) || [];
+  const checkboxes = [];
+
+  const profileEntries = Object.entries(profiles);
+  if (!profileEntries.length) {
+    const empty = document.createElement("p");
+    empty.className = "gate-sub";
+    empty.textContent = "Ainda ninguém fez login além de ti.";
+    cooksList.appendChild(empty);
+  }
+
+  profileEntries.forEach(([uid, profile]) => {
+    const label = document.createElement("label");
+    label.className = "admin-cook-item";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = uid;
+    cb.checked = existingOrder.includes(uid);
+    const span = document.createElement("span");
+    span.textContent = profile.name;
+    label.append(cb, span);
+    cooksList.appendChild(label);
+    checkboxes.push(cb);
+  });
+
+  form.appendChild(cooksList);
+
+  const periodLabel = document.createElement("h3");
+  periodLabel.className = "suggestions-title";
+  periodLabel.textContent = "Período";
+  form.appendChild(periodLabel);
+
+  const periodRow = document.createElement("div");
+  periodRow.className = "admin-period";
+
+  const startInput = document.createElement("input");
+  startInput.type = "date";
+  startInput.required = true;
+  startInput.value = (scheduleConfig.period && scheduleConfig.period.startDate) || "";
+
+  const sep = document.createElement("span");
+  sep.textContent = "a";
+
+  const endInput = document.createElement("input");
+  endInput.type = "date";
+  endInput.required = true;
+  endInput.value = (scheduleConfig.period && scheduleConfig.period.endDate) || "";
+
+  periodRow.append(startInput, sep, endInput);
+  form.appendChild(periodRow);
+
+  const errorEl = document.createElement("p");
+  errorEl.className = "gate-error";
+  form.appendChild(errorEl);
+
+  const saveBtn = document.createElement("button");
+  saveBtn.type = "submit";
+  saveBtn.className = "gate-google";
+  saveBtn.textContent = "Guardar";
+  form.appendChild(saveBtn);
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    errorEl.textContent = "";
+
+    const order = checkboxes.filter((cb) => cb.checked).map((cb) => cb.value);
+    if (!order.length) {
+      errorEl.textContent = "Escolhe pelo menos uma conta.";
+      return;
+    }
+    if (!startInput.value || !endInput.value) {
+      errorEl.textContent = "Escolhe as datas de início e fim.";
+      return;
+    }
+    if (endInput.value < startInput.value) {
+      errorEl.textContent = "A data de fim não pode ser antes da de início.";
+      return;
+    }
+
+    saveBtn.disabled = true;
+    Promise.all([
+      backend.writeCooks({ order, ts: Date.now() }),
+      backend.writePeriod({ startDate: startInput.value, endDate: endInput.value, ts: Date.now() })
+    ])
+      .then(() => closeAdminPanel())
+      .catch(() => {
+        errorEl.textContent = "Não foi possível guardar. Tenta outra vez.";
+      })
+      .finally(() => {
+        saveBtn.disabled = false;
+      });
+  });
+
+  sheet.appendChild(form);
+  $adminPanel.append(backdrop, sheet);
+  $adminPanel.hidden = false;
+}
+
+function closeAdminPanel() {
+  $adminPanel.hidden = true;
+  $adminPanel.replaceChildren();
+}
+
+document.getElementById("admin-open").addEventListener("click", openAdminPanel);
+
+/* =========================================================
    Render
    ========================================================= */
 
@@ -301,21 +579,21 @@ function renderPeople() {
   const nav = document.getElementById("people");
   nav.replaceChildren();
 
-  Object.entries(PEOPLE).forEach(([key, p]) => {
+  Object.entries(PEOPLE).forEach(([uid, p]) => {
     const b = document.createElement("button");
     b.className = "chip";
     b.style.setProperty("--c", p.color);
-    b.setAttribute("aria-pressed", filter === key ? "true" : "false");
+    b.setAttribute("aria-pressed", filter === uid ? "true" : "false");
 
     const dot = document.createElement("span");
     dot.className = "dot";
     const n = document.createElement("span");
     n.className = "n";
-    n.textContent = counts[key] + "×";
+    n.textContent = (counts[uid] || 0) + "×";
 
     b.append(dot, document.createTextNode(p.name), n);
     b.addEventListener("click", () => {
-      filter = filter === key ? null : key;
+      filter = filter === uid ? null : uid;
       renderPeople();
       applyFilter();
     });
@@ -335,7 +613,7 @@ function autoGrow(ta) {
 }
 
 function buildCard(d, today) {
-  const p = PEOPLE[d.who];
+  const p = PEOPLE[d.who] || { name: "?", color: "#999999" };
   const card = document.createElement("article");
   card.className = "day" + (d.id === today ? " today" : "");
   card.dataset.who = d.who;
@@ -756,7 +1034,7 @@ function openDayPanel(d, card) {
   const menuEl = card.querySelector(".menu");
   const feedbackEl = card.querySelector(".feedback");
 
-  const p = PEOPLE[d.who];
+  const p = PEOPLE[d.who] || { name: "?", color: "#999999" };
   $panel.replaceChildren();
 
   const backdrop = document.createElement("div");
@@ -824,7 +1102,9 @@ function closeDayPanel() {
 }
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && openPanelDay) closeDayPanel();
+  if (e.key !== "Escape") return;
+  if (openPanelDay) closeDayPanel();
+  if (!$adminPanel.hidden) closeAdminPanel();
 });
 
 function renderWeeks() {
@@ -836,14 +1116,14 @@ function renderWeeks() {
   attendanceControls.clear();
   const today = todayId();
 
-  [[0, 7], [7, 14]].forEach(([from, to], i) => {
+  for (let from = 0; from < DAYS.length; from += 7) {
+    const to = Math.min(from + 7, DAYS.length);
     const sec = document.createElement("section");
     sec.className = "week";
 
     const label = document.createElement("h2");
     label.className = "week-label";
-    label.textContent =
-      "Semana " + (i + 1) + " · " + DAYS[from].num + "–" + DAYS[to - 1].num + " agosto";
+    label.textContent = "Semana " + (from / 7 + 1) + " · " + DAYS[from].num + "–" + DAYS[to - 1].num;
     sec.appendChild(label);
 
     const grid = document.createElement("div");
@@ -852,7 +1132,7 @@ function renderWeeks() {
 
     sec.appendChild(grid);
     host.appendChild(sec);
-  });
+  }
 
   applyFilter();
 }
@@ -901,10 +1181,16 @@ function queueWrite(dayId, value) {
    ========================================================= */
 
 document.getElementById("copy").addEventListener("click", async () => {
-  let out = "👨‍🍳 ESCALA DE JANTARES (1 a 14 de Agosto) 🍽️\n\n";
+  const period = scheduleConfig.period;
+  let out =
+    "👨‍🍳 ESCALA DE JANTARES" +
+    (period ? " (" + formatDatePt(period.startDate) + " a " + formatDatePt(period.endDate) + ")" : "") +
+    " 🍽️\n\n";
+
   DAYS.forEach((d) => {
     const m = (menus[d.id] || "").trim().replace(/\n+/g, " / ");
-    out += "📅 " + d.num + "/08 (" + SHORT_WD[d.wd] + ") — " + PEOPLE[d.who].name + "\n";
+    const cookName = (PEOPLE[d.who] && PEOPLE[d.who].name) || "?";
+    out += "📅 " + d.num + "/" + d.id.split("-")[1] + " (" + SHORT_WD[d.wd] + ") — " + cookName + "\n";
     out += "🍽️ Ementa: " + m + "\n";
 
     const entries = Object.values(feedback[d.id] || {});
@@ -937,20 +1223,27 @@ document.getElementById("copy").addEventListener("click", async () => {
 
 function startApp() {
   $gate.hidden = true;
-  $appWrap.hidden = false;
-
-  renderPeople();
-  renderWeeks();
-  setStatus("A ligar…");
-
-  backend.start(applyRemote);
-  backend.startFeedback(applyRemoteFeedback);
-  backend.startProfiles(applyRemoteProfiles);
-  backend.startAttendance(applyRemoteAttendance);
 
   $session.textContent = "A usar como " + currentUser.name;
   $note.textContent =
     "As ementas, reviews e presenças ficam guardadas e sincronizam em tempo real.";
+
+  backend.startProfiles((remote) => {
+    applyRemoteProfiles(remote);
+    regenerateSchedule();
+  });
+
+  backend.startConfig(
+    (periodConfig) => {
+      scheduleConfig.period = periodConfig;
+      regenerateSchedule();
+    },
+    (cooksConfig) => {
+      scheduleConfig.cooks = cooksConfig;
+      regenerateSchedule();
+    }
+  );
+
   setStatus("");
 }
 
