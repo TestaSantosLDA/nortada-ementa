@@ -787,7 +787,7 @@ function buildCard(d, today) {
     '<div class="spine"></div>' +
     '<div class="day-head">' +
       '<div class="num">' + d.num + "</div>" +
-      '<div class="wd">' + d.wd + "</div>" +
+      '<div class="wd">' + (SHORT_WD[d.wd] || d.wd) + "</div>" +
       '<div class="cook"><span class="dot"></span>' + p.name + "</div>" +
       (d.id === today ? '<span class="today-tag">Hoje</span>' : "") +
     "</div>" +
@@ -849,7 +849,14 @@ function renderAttendanceBadge(dayId) {
   const badge = attendanceBadges.get(dayId);
   if (!badge) return;
   const total = computeDayTotal(dayId);
-  badge.textContent = total + (total === 1 ? " pessoa" : " pessoas");
+  /* número e unidade separados para o CSS os poder empilhar nas linhas */
+  const num = document.createElement("b");
+  num.className = "att-total";
+  num.textContent = String(total);
+  const unit = document.createElement("span");
+  unit.className = "att-unit";
+  unit.textContent = total === 1 ? "pessoa" : "pessoas";
+  badge.replaceChildren(num, unit);
 }
 
 function buildAttendanceSection(d) {
@@ -1375,6 +1382,15 @@ function renderWeeks() {
   menuChipEls.clear();
   const today = todayId();
 
+  /* O jantar de hoje vive num cartão de destaque no topo,
+     fora das semanas; os restantes dias ficam nas linhas. */
+  const todayDay = DAYS.find((d) => d.id === today);
+  if (todayDay) {
+    const hero = buildCard(todayDay, today);
+    hero.classList.add("day-hero");
+    host.appendChild(hero);
+  }
+
   for (let from = 0; from < DAYS.length; from += 7) {
     const to = Math.min(from + 7, DAYS.length);
     const sec = document.createElement("section");
@@ -1387,7 +1403,10 @@ function renderWeeks() {
 
     const grid = document.createElement("div");
     grid.className = "grid";
-    DAYS.slice(from, to).forEach((d) => grid.appendChild(buildCard(d, today)));
+    DAYS.slice(from, to).forEach((d) => {
+      if (d.id === today) return;
+      grid.appendChild(buildCard(d, today));
+    });
 
     sec.appendChild(grid);
     host.appendChild(sec);
