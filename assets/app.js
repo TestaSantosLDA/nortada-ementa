@@ -412,6 +412,22 @@ function buildDays(startDate, endDate, cookOrder) {
   return days;
 }
 
+function countDays(startDate, endDate) {
+  const start = new Date(startDate + "T00:00:00");
+  const end = new Date(endDate + "T00:00:00");
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+function shiftDate(iso, days) {
+  const d = new Date(iso + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, "0"),
+    String(d.getDate()).padStart(2, "0")
+  ].join("-");
+}
+
 function regenerateSchedule() {
   if (openPanelDay) closeDayPanel();
 
@@ -637,6 +653,18 @@ function openAdminPanel() {
   saveBtn.textContent = "Guardar";
   form.appendChild(saveBtn);
 
+  /* Aviso de escala desequilibrada: o primeiro "Guardar" avisa, o segundo
+     guarda na mesma. Mexer nos cozinheiros ou nas datas recomeça. */
+  let warnedImbalance = false;
+  const resetImbalanceWarning = () => {
+    warnedImbalance = false;
+    saveBtn.textContent = "Guardar";
+    errorEl.textContent = "";
+  };
+  checkboxes.forEach((cb) => cb.addEventListener("change", resetImbalanceWarning));
+  startInput.addEventListener("change", resetImbalanceWarning);
+  endInput.addEventListener("change", resetImbalanceWarning);
+
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     errorEl.textContent = "";
@@ -652,6 +680,28 @@ function openAdminPanel() {
     }
     if (endInput.value < startInput.value) {
       errorEl.textContent = "A data de fim não pode ser antes da de início.";
+      return;
+    }
+
+    /* A rotação é round-robin: se o período não dividir certo pelos
+       cozinheiros, os primeiros da ordem ficam com um jantar a mais. */
+    const totalDays = countDays(startInput.value, endInput.value);
+    const extra = totalDays % order.length;
+    if (extra && !warnedImbalance) {
+      const per = Math.floor(totalDays / order.length);
+      const endings = [];
+      if (totalDays > extra) {
+        endings.push(formatDatePt(shiftDate(endInput.value, -extra)));
+      }
+      endings.push(formatDatePt(shiftDate(endInput.value, order.length - extra)));
+      errorEl.textContent =
+        "São " + totalDays + " jantares para " + order.length + " cozinheiros: " +
+        extra + (extra > 1 ? " ficam" : " fica") + " com " + (per + 1) +
+        " e os outros com " + per +
+        ". Para ficar equilibrado, termina a " + endings.join(" ou a ") +
+        "; se não der, carrega em «Guardar mesmo assim».";
+      warnedImbalance = true;
+      saveBtn.textContent = "Guardar mesmo assim";
       return;
     }
 
@@ -1621,9 +1671,23 @@ function buildShopListCard(listId) {
   const card = document.createElement("article");
   card.className = "shop-list";
 
+  const head = document.createElement("div");
+  head.className = "shop-list-head";
+
   const nameEl = document.createElement("h3");
   nameEl.className = "shop-list-name";
-  card.appendChild(nameEl);
+
+  const progressEl = document.createElement("span");
+  progressEl.className = "shop-progress";
+
+  head.append(nameEl, progressEl);
+  card.appendChild(head);
+
+  const barEl = document.createElement("div");
+  barEl.className = "shop-bar";
+  const barFill = document.createElement("i");
+  barEl.appendChild(barFill);
+  card.appendChild(barEl);
 
   const itemsUl = document.createElement("ul");
   itemsUl.className = "shop-items";
@@ -1665,17 +1729,25 @@ function buildShopListCard(listId) {
   });
   card.appendChild(form);
 
-  return { card, nameEl, itemsUl, chipsEl };
+  return { card, nameEl, progressEl, barFill, itemsUl, chipsEl };
 }
 
 function renderShopItems(listId) {
   const els = shopListEls.get(listId);
   if (!els) return;
 
+  /* por fazer primeiro, feitos no fim; ordem por ts dentro de cada grupo */
   const items = Object.entries((shoppingLists[listId] || {}).items || {}).sort(
-    (a, b) => (a[1].ts || 0) - (b[1].ts || 0)
+    (a, b) =>
+      (a[1].done ? 1 : 0) - (b[1].done ? 1 : 0) ||
+      (a[1].ts || 0) - (b[1].ts || 0)
   );
   els.itemsUl.replaceChildren();
+
+  const total = items.length;
+  const done = items.filter(([, item]) => item.done).length;
+  els.progressEl.textContent = total ? done + "/" + total : "";
+  els.barFill.style.width = total ? Math.round((done / total) * 100) + "%" : "0";
 
   if (!items.length) {
     const li = document.createElement("li");

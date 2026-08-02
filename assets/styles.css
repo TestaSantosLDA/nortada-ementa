@@ -318,10 +318,13 @@ header.top{
 }
 .week-label::after{content:"";flex:1;height:1px;background:var(--line)}
 
-.grid{display:grid;gap:10px;grid-template-columns:repeat(7,1fr)}
-@media (max-width:1080px){.grid{grid-template-columns:repeat(4,1fr)}}
-@media (max-width:760px){.grid{grid-template-columns:repeat(2,1fr)}}
-@media (max-width:460px){.grid{grid-template-columns:1fr}}
+/* 480px é o mínimo para a linha horizontal do .day (cabeçalho + ementa +
+   presenças) caber; com o .wrap a 1280px dá no máximo 2 colunas */
+.grid{
+  display:grid;gap:10px;
+  grid-template-columns:repeat(auto-fill,minmax(480px,1fr));
+}
+@media (max-width:760px){.grid{grid-template-columns:1fr}}
 
 /* ---------- cartão do dia ---------- */
 .day{
@@ -463,5 +466,103 @@ textarea:disabled{color:var(--muted)}
   border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--card);
 }
 .admin-period span{color:var(--muted);font-size:13px}
+
+/* =========================================================
+   Redesign mobile-first
+   ========================================================= */
+
+/* ---------- o cartão do dia passa a linha ---------- */
+/* Filhos de .day (pela ordem do buildCard): .spine, .day-head, .attendance, .menu, .feedback */
+.grid .day{
+  display:grid;
+  grid-template-columns:4px auto 1fr auto;
+  grid-template-areas:"spine head menu att";
+  align-items:center;
+  padding:0;overflow:hidden;
+}
+.grid .day .spine{grid-area:spine;width:4px;height:100%}
+.grid .day .day-head{
+  grid-area:head;
+  display:flex;align-items:center;gap:10px;
+  padding:12px 4px 12px 12px;
+}
+.grid .day .num{font-size:26px;line-height:1}
+.grid .day .wd{margin-top:0;font-size:10.5px}
+.grid .day .cook{margin-top:0}
+.grid .day .today-tag{margin-top:0}
+
+.grid .day .menu{
+  grid-area:menu;margin:0;padding:12px 10px;border-top:0;gap:0;min-width:0;
+}
+.grid .day .menu label{display:none}                 /* "Ementa" só no painel */
+.grid .day .menu textarea{
+  height:auto!important;min-height:0;                /* o autoGrow escreve height inline */
+  max-height:2.9em;overflow:hidden;
+}
+.grid .day .attendance{
+  grid-area:att;margin:0;padding:12px;border-top:0;
+  flex-direction:column;align-items:flex-end;gap:6px;
+}
+.grid .day .feedback{display:none}                   /* reviews vivem no painel */
+.grid .day .suggestions,
+.grid .day .swap{display:none}
+
+/* ≤560px: número + presenças em cima, ementa por baixo */
+@media (max-width:560px){
+  .grid .day{
+    grid-template-columns:4px 1fr auto;
+    grid-template-areas:
+      "spine head att"
+      "spine menu menu";
+    align-items:start;
+  }
+  .grid .day .attendance{padding:12px 12px 0}
+  .grid .day .menu{padding:4px 12px 12px 12px}
+  .grid .day .day-head{padding:12px 12px 4px}
+}
+
+/* ---------- painel = bottom sheet no telemóvel ---------- */
+@media (max-width:560px){
+  .panel{align-items:flex-end;padding:0}
+  .panel-sheet{
+    max-width:none;width:100%;
+    max-height:92vh;border-radius:20px 20px 0 0;
+    padding:0 16px calc(16px + env(safe-area-inset-bottom));
+  }
+  .panel-head{padding:16px 0 10px}
+}
+/* O painel é onde as reviews/recomendações aparecem sempre */
+.panel-sheet .feedback{display:flex}
+.panel-sheet .menu label{display:block}
+.panel-sheet .menu textarea{height:auto;min-height:46px;max-height:none}
+
+/* ---------- alvos de toque a 44px ---------- */
+@media (max-width:760px){
+  .att-btn{width:44px;height:44px;font-size:18px}
+  .panel-close{width:44px;height:44px;font-size:20px}
+  .att-skip{min-height:44px;padding:0 10px}
+  .fb-star{font-size:28px;padding:0 3px;min-width:36px;min-height:44px}
+  .fb-submit,.suggestion-use,.shop-add-btn{min-height:44px;padding:0 16px}
+  .shop-add input,.shop-create input{min-height:44px}
+  .shop-item label{min-height:48px;padding:10px 12px}
+  .shop-item input[type="checkbox"]{width:22px;height:22px}
+  .tab{min-height:44px;padding:0 18px}
+}
+
+/* ---------- cabeçalho e rodapé compactos no telemóvel ---------- */
+@media (max-width:560px){
+  .wrap{padding:20px 14px 56px}
+  header.top{align-items:flex-start;gap:8px}
+  .head-status{align-items:flex-start}
+  .foot{flex-direction:column;align-items:stretch}
+  .foot-actions .copy,.foot-actions .admin-btn{width:100%}
+}
+
+/* ---------- listas de compras: progresso + feitos no fim ---------- */
+.shop-list-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.shop-progress{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.shop-bar{height:4px;border-radius:2px;background:var(--paper);overflow:hidden}
+.shop-bar > i{display:block;height:100%;background:var(--luis);transition:width .2s ease}
+.shop-item.done label{opacity:.65}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
