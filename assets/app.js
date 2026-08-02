@@ -36,6 +36,9 @@ let feedback = {};                // { dayId: { entryId: {type, stars, text, ts}
 let attendance = {};               // { dayId: { uid: {count, ts} } }
 let shoppingLists = {};            // { listId: {name, createdBy, ts, items: {itemId: {name, done, ts}}} }
 let activeTab = "escala";          // "escala" | "compras"
+let allMenus = {};                 // { periodo: { dayId: texto } } — histórico completo
+let allReviews = {};               // { periodo: { dayId: { entryId: entry } } }
+let menuIndex = null;              // Map norm -> {display, lastDate, starSum, starCount} (lazy)
 let profiles = {};                 // { uid: {name, householdSize, ts} }
 let filter = null;                 // cozinheiro (uid) selecionado, ou null
 let backend = null;                // preenchido depois do login
@@ -304,6 +307,18 @@ function makeBackend(db, fns) {
         count,
         ts: Date.now()
       });
+    },
+    startMenuHistory(onMenus, onReviews) {
+      onValue(
+        ref(db, MENUS_BASE),
+        (snap) => onMenus(snap.val() || {}),
+        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
+      );
+      onValue(
+        ref(db, "reviews"),
+        (snap) => onReviews(snap.val() || {}),
+        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
+      );
     },
     startShoppingLists(onRemote) {
       onValue(
@@ -718,8 +733,15 @@ function buildCard(d, today) {
   ta.addEventListener("input", () => {
     autoGrow(ta);
     queueWrite(d.id, ta.value);
+    renderMenuChips(d.id);
     if (openPanelDay && openPanelDay.dayId === d.id) updatePanelSuggestions();
   });
+  ta.addEventListener("focus", () => renderMenuChips(d.id));
+
+  const menuChips = document.createElement("div");
+  menuChips.className = "menu-chips";
+  card.querySelector(".menu").appendChild(menuChips);
+  menuChipEls.set(d.id, menuChips);
 
   textareas.set(d.id, ta);
   requestAnimationFrame(() => autoGrow(ta));
@@ -1047,7 +1069,8 @@ function buildSuggestionsSection(d) {
   const recs = Object.values(feedback[d.id] || {}).filter(
     (e) => e.type === "recommendation" && e.text
   );
-  if (!recs.length) return null;
+  const hasHistory = getMenuIndex().size > 0;
+  if (!recs.length && !hasHistory) return null;
 
   const wrap = document.createElement("div");
   wrap.className = "suggestions";
@@ -1056,6 +1079,20 @@ function buildSuggestionsSection(d) {
   title.className = "suggestions-title";
   title.textContent = "Sugestões";
   wrap.appendChild(title);
+
+  if (hasHistory) {
+    const roleta = document.createElement("button");
+    roleta.type = "button";
+    roleta.className = "suggestion-use roleta-btn";
+    roleta.textContent = "Sem ideias? Sugerir um prato do histórico";
+    roleta.addEventListener("click", () => {
+      const pick = pickRoletaDish();
+      if (pick) fillMenu(d.id, pick.display);
+    });
+    wrap.appendChild(roleta);
+  }
+
+  if (!recs.length) return wrap;
 
   const list = document.createElement("ul");
   list.className = "suggestions-list";
@@ -1194,6 +1231,7 @@ function renderWeeks() {
   feedbackLists.clear();
   attendanceBadges.clear();
   attendanceControls.clear();
+  menuChipEls.clear();
   const today = todayId();
 
   for (let from = 0; from < DAYS.length; from += 7) {
@@ -1296,6 +1334,114 @@ document.getElementById("copy").addEventListener("click", async () => {
     setStatus("O copiar falhou. Seleciona o texto do quadro à mão.", "error");
   }
 });
+
+/* =========================================================
+   Histórico de ementas (autocomplete + roleta)
+   ========================================================= */
+
+const menuChipEls = new Map(); // dayId -> contentor dos chips
+
+function applyRemoteAllMenus(remote) {
+  allMenus = remote || {};
+  menuIndex = null;
+}
+
+function applyRemoteAllReviews(remote) {
+  allReviews = remote || {};
+  menuIndex = null;
+}
+
+function getMenuIndex() {
+  if (menuIndex) return menuIndex;
+  menuIndex = new Map();
+  Object.entries(allMenus).forEach(([periodo, days]) => {
+    Object.entries(days || {}).forEach(([dayId, text]) => {
+      const display = String(text || "").trim();
+      if (!display) return;
+      const norm = display.toLowerCase();
+      let entry = menuIndex.get(norm);
+      if (!entry) {
+        entry = { display, lastDate: dayId, starSum: 0, starCount: 0 };
+        menuIndex.set(norm, entry);
+      }
+      if (dayId >= entry.lastDate) {
+        entry.lastDate = dayId;
+        entry.display = display;
+      }
+      const dayReviews = (allReviews[periodo] || {})[dayId];
+      if (dayReviews) {
+        Object.values(dayReviews).forEach((r) => {
+          if (r.type === "review" && r.stars) {
+            entry.starSum += r.stars;
+            entry.starCount++;
+          }
+        });
+      }
+    });
+  });
+  return menuIndex;
+}
+
+function fillMenu(dayId, text) {
+  const ta = textareas.get(dayId);
+  if (!ta) return;
+  ta.value = text;
+  autoGrow(ta);
+  queueWrite(dayId, text);
+  renderMenuChips(dayId);
+  if (openPanelDay && openPanelDay.dayId === dayId) updatePanelSuggestions();
+}
+
+function renderMenuChips(dayId) {
+  const host = menuChipEls.get(dayId);
+  const ta = textareas.get(dayId);
+  if (!host || !ta) return;
+
+  const q = ta.value.trim().toLowerCase();
+  let entries = [...getMenuIndex().values()];
+  if (q) {
+    entries = entries.filter(
+      (e) => e.display.toLowerCase().includes(q) && e.display.toLowerCase() !== q
+    );
+  }
+  entries.sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+  entries = entries.slice(0, 6);
+
+  host.replaceChildren();
+  entries.forEach((e) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "menu-chip";
+    b.textContent = e.display;
+    b.addEventListener("mousedown", (ev) => ev.preventDefault());
+    b.addEventListener("click", () => fillMenu(dayId, e.display));
+    host.appendChild(b);
+  });
+}
+
+function pickRoletaDish() {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - 14);
+  const cutoff = [
+    cutoffDate.getFullYear(),
+    String(cutoffDate.getMonth() + 1).padStart(2, "0"),
+    String(cutoffDate.getDate()).padStart(2, "0")
+  ].join("-");
+
+  const all = [...getMenuIndex().values()];
+  if (!all.length) return null;
+  const rested = all.filter((e) => e.lastDate < cutoff);
+  const pool = rested.length ? rested : all;
+
+  pool.sort((a, b) => {
+    const sa = a.starCount ? a.starSum / a.starCount : 3;
+    const sb = b.starCount ? b.starSum / b.starCount : 3;
+    if (sb !== sa) return sb - sa;
+    return a.lastDate.localeCompare(b.lastDate);
+  });
+  const top = pool.slice(0, 5);
+  return top[Math.floor(Math.random() * top.length)];
+}
 
 /* =========================================================
    Tabs (Escala / Lista de compras)
@@ -1516,6 +1662,7 @@ function startApp() {
   }, onLoadError);
 
   backend.startShoppingLists(applyRemoteShoppingLists);
+  backend.startMenuHistory(applyRemoteAllMenus, applyRemoteAllReviews);
 
   backend.startConfig(
     (periodConfig) => {

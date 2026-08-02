@@ -3,8 +3,8 @@
     ".read": false,
     ".write": false,
     "ementas": {
+      ".read": "auth != null",
       "$periodo": {
-        ".read": "auth != null",
         ".write": "auth != null",
         "$dia": {
           ".validate": "newData.isString() && newData.val().length <= 500"
@@ -12,8 +12,8 @@
       }
     },
     "reviews": {
+      ".read": "auth != null",
       "$periodo": {
-        ".read": "auth != null",
         "$dia": {
           "$entryId": {
             ".write": "auth != null",
