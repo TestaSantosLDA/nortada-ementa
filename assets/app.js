@@ -34,25 +34,41 @@ const SHORT_WD = {
   "Terça": "Ter", "Quarta": "Qua", "Quinta": "Qui", "Sexta": "Sex"
 };
 
-const LOCAL_KEY = "nortada-ementa-2026-08";
-const LOCAL_FEEDBACK_KEY = "nortada-feedback-2026-08";
 const MAX_LEN = 500;
 const PERIODO = DB_PATH.split("/")[1];
 const REVIEWS_PATH = "reviews/" + PERIODO;
+const ATTENDANCE_PATH = "attendance/" + PERIODO;
+
+const GOOGLE_G_SVG =
+  '<svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">' +
+  '<path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>' +
+  '<path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.55-1.85.87-3.04.87-2.34 0-4.32-1.58-5.03-3.7H.95v2.33A9 9 0 0 0 9 18z"/>' +
+  '<path fill="#FBBC05" d="M3.97 10.73A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.19.29-1.73V4.94H.95A9 9 0 0 0 0 9c0 1.45.35 2.83.95 4.06z"/>' +
+  '<path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .95 4.94l3.02 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>' +
+  "</svg>";
 
 /* =========================================================
    Estado
    ========================================================= */
 
-let menus = {};                 // { "2026-08-01": "Bacalhau à Brás", ... }
-let feedback = {};              // { "2026-08-01": { entryId: {type, stars, text, ts} } }
-let filter = null;              // pessoa selecionada, ou null
-let backend = null;             // preenchido no arranque
-const textareas = new Map();    // dayId -> elemento
-const feedbackLists = new Map(); // dayId -> elemento <ul>
+let menus = {};                  // { "2026-08-01": "Bacalhau à Brás", ... }
+let feedback = {};                // { dayId: { entryId: {type, stars, text, ts} } }
+let attendance = {};               // { dayId: { uid: {count, ts} } }
+let profiles = {};                 // { uid: {name, householdSize, ts} }
+let filter = null;                 // pessoa selecionada, ou null
+let backend = null;                // preenchido depois do login
+let currentUser = null;            // { uid, name }
+
+const textareas = new Map();       // dayId -> elemento
+const feedbackLists = new Map();   // dayId -> elemento <ul>
+const attendanceBadges = new Map();   // dayId -> elemento do total
+const attendanceControls = new Map(); // dayId -> { render() }
 
 const $status = document.getElementById("status");
 const $note = document.getElementById("mode-note");
+const $session = document.getElementById("session");
+const $gate = document.getElementById("gate");
+const $appWrap = document.getElementById("app-wrap");
 
 function setStatus(text, state) {
   $status.textContent = text;
@@ -69,61 +85,158 @@ function todayId() {
   ].join("-");
 }
 
-/* =========================================================
-   Backends de persistência
-   ========================================================= */
-
-function localBackend() {
-  return {
-    label: "local",
-    async start(onRemote) {
-      try {
-        menus = JSON.parse(localStorage.getItem(LOCAL_KEY) || "{}");
-      } catch {
-        menus = {};
-      }
-      onRemote(menus);
-    },
-    async write(dayId, value) {
-      menus[dayId] = value;
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(menus));
-    },
-    async startFeedback(onRemote) {
-      try {
-        feedback = JSON.parse(localStorage.getItem(LOCAL_FEEDBACK_KEY) || "{}");
-      } catch {
-        feedback = {};
-      }
-      onRemote(feedback);
-    },
-    async writeFeedback(dayId, entry) {
-      const entryId = "local-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-      feedback[dayId] = feedback[dayId] || {};
-      feedback[dayId][entryId] = entry;
-      localStorage.setItem(LOCAL_FEEDBACK_KEY, JSON.stringify(feedback));
-      return entryId;
-    }
-  };
+function isConfigured() {
+  return !String(firebaseConfig.apiKey || "").includes("COLOCAR_AQUI");
 }
 
-async function firebaseBackend() {
-  const [{ initializeApp }, { getAuth, signInAnonymously }, dbMod] = await Promise.all([
-    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"),
-    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"),
-    import("https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js")
-  ]);
-  const { getDatabase, ref, onValue, update, push, set } = dbMod;
+/* =========================================================
+   Portão de entrada (Google Sign-In)
+   ========================================================= */
 
-  const app = initializeApp(firebaseConfig);
-  await signInAnonymously(getAuth(app));
+function clearGate() {
+  $gate.replaceChildren();
+  $gate.hidden = false;
+  $appWrap.hidden = true;
+}
 
-  const db = getDatabase(app);
+function renderGateLogin(onClick) {
+  clearGate();
+  const card = document.createElement("div");
+  card.className = "gate-card";
+
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "gate-eyebrow";
+  eyebrow.textContent = "Escala de jantares";
+
+  const title = document.createElement("h1");
+  title.className = "gate-title";
+  title.textContent = "Antes de te sentares à mesa";
+
+  const sub = document.createElement("p");
+  sub.className = "gate-sub";
+  sub.textContent =
+    "Entra com o Google para veres a escala, escreveres a ementa e confirmares presença.";
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "gate-google";
+  btn.innerHTML = GOOGLE_G_SVG + "<span>Continuar com Google</span>";
+  btn.addEventListener("click", onClick);
+
+  card.append(eyebrow, title, sub, btn);
+  $gate.appendChild(card);
+}
+
+function renderGateError(message, retryFn) {
+  clearGate();
+  const card = document.createElement("div");
+  card.className = "gate-card";
+
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "gate-eyebrow";
+  eyebrow.textContent = "Escala de jantares";
+
+  const title = document.createElement("h1");
+  title.className = "gate-title";
+  title.textContent = "Não foi possível entrar";
+
+  const msg = document.createElement("p");
+  msg.className = "gate-error";
+  msg.textContent = message;
+
+  card.append(eyebrow, title, msg);
+
+  if (retryFn) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "gate-google";
+    btn.textContent = "Tentar outra vez";
+    btn.addEventListener("click", retryFn);
+    card.appendChild(btn);
+  }
+
+  $gate.appendChild(card);
+}
+
+function renderProfilePrompt(name, onSubmit) {
+  clearGate();
+  const card = document.createElement("div");
+  card.className = "gate-card";
+
+  const eyebrow = document.createElement("p");
+  eyebrow.className = "gate-eyebrow";
+  eyebrow.textContent = "Olá, " + name;
+
+  const title = document.createElement("h1");
+  title.className = "gate-title";
+  title.textContent = "Quantos vêm contigo?";
+
+  const sub = document.createElement("p");
+  sub.className = "gate-sub";
+  sub.textContent =
+    "Este número conta por omissão em cada jantar. Podes sempre ajustar dia a dia.";
+
+  const form = document.createElement("form");
+  form.className = "gate-form";
+
+  const stepperRow = document.createElement("div");
+  stepperRow.className = "gate-stepper";
+
+  const minus = document.createElement("button");
+  minus.type = "button";
+  minus.className = "att-btn";
+  minus.textContent = "−";
+
+  const bigNum = document.createElement("span");
+  bigNum.className = "gate-num";
+  let n = 1;
+  bigNum.textContent = String(n);
+
+  const plus = document.createElement("button");
+  plus.type = "button";
+  plus.className = "att-btn";
+  plus.textContent = "+";
+
+  minus.addEventListener("click", () => {
+    n = Math.max(1, n - 1);
+    bigNum.textContent = String(n);
+  });
+  plus.addEventListener("click", () => {
+    n = Math.min(20, n + 1);
+    bigNum.textContent = String(n);
+  });
+
+  stepperRow.append(minus, bigNum, plus);
+
+  const submitBtn = document.createElement("button");
+  submitBtn.type = "submit";
+  submitBtn.className = "gate-google";
+  submitBtn.textContent = "Confirmar";
+
+  form.append(stepperRow, submitBtn);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    onSubmit(n);
+  });
+
+  card.append(eyebrow, title, sub, form);
+  $gate.appendChild(card);
+}
+
+/* =========================================================
+   Ligação ao Firebase
+   ========================================================= */
+
+function makeBackend(db, fns) {
+  const { ref, onValue, update, push, set, get } = fns;
   const node = ref(db, DB_PATH);
   const reviewsNode = ref(db, REVIEWS_PATH);
+  const usersNode = ref(db, "users");
+  const attendanceNode = ref(db, ATTENDANCE_PATH);
 
   return {
-    label: "firebase",
-    async start(onRemote) {
+    start(onRemote) {
       onValue(
         node,
         (snap) => onRemote(snap.val() || {}),
@@ -133,7 +246,7 @@ async function firebaseBackend() {
     async write(dayId, value) {
       await update(node, { [dayId]: value });
     },
-    async startFeedback(onRemote) {
+    startFeedback(onRemote) {
       onValue(
         reviewsNode,
         (snap) => onRemote(snap.val() || {}),
@@ -144,12 +257,35 @@ async function firebaseBackend() {
       const entryRef = push(ref(db, REVIEWS_PATH + "/" + dayId));
       await set(entryRef, entry);
       return entryRef.key;
+    },
+    startProfiles(onRemote) {
+      onValue(
+        usersNode,
+        (snap) => onRemote(snap.val() || {}),
+        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
+      );
+    },
+    startAttendance(onRemote) {
+      onValue(
+        attendanceNode,
+        (snap) => onRemote(snap.val() || {}),
+        (err) => setStatus("Sem ligação à base de dados: " + err.code, "error")
+      );
+    },
+    async writeAttendance(dayId, count) {
+      await set(ref(db, ATTENDANCE_PATH + "/" + dayId + "/" + currentUser.uid), {
+        count,
+        ts: Date.now()
+      });
+    },
+    async writeProfile(uid, profile) {
+      await set(ref(db, "users/" + uid), profile);
+    },
+    async readProfile(uid) {
+      const snap = await get(ref(db, "users/" + uid));
+      return snap.exists() ? snap.val() : null;
     }
   };
-}
-
-function isConfigured() {
-  return !String(firebaseConfig.apiKey || "").includes("COLOCAR_AQUI");
 }
 
 /* =========================================================
@@ -173,7 +309,7 @@ function renderPeople() {
     dot.className = "dot";
     const n = document.createElement("span");
     n.className = "n";
-    n.textContent = counts[key] + "\u00D7";
+    n.textContent = counts[key] + "×";
 
     b.append(dot, document.createTextNode(p.name), n);
     b.addEventListener("click", () => {
@@ -227,8 +363,127 @@ function buildCard(d, today) {
   textareas.set(d.id, ta);
   requestAnimationFrame(() => autoGrow(ta));
 
+  card.insertBefore(buildAttendanceSection(d), card.querySelector(".menu"));
   card.appendChild(buildFeedbackSection(d));
   return card;
+}
+
+/* =========================================================
+   Presenças
+   ========================================================= */
+
+function getMyCount(dayId) {
+  const mine = (attendance[dayId] || {})[currentUser.uid];
+  if (mine) return mine.count;
+  const profile = profiles[currentUser.uid];
+  return profile ? profile.householdSize : 1;
+}
+
+function computeDayTotal(dayId) {
+  const dayAttendance = attendance[dayId] || {};
+  return Object.keys(profiles).reduce((sum, uid) => {
+    const override = dayAttendance[uid];
+    const count = override ? override.count : profiles[uid].householdSize;
+    return sum + count;
+  }, 0);
+}
+
+function renderAttendanceBadge(dayId) {
+  const badge = attendanceBadges.get(dayId);
+  if (!badge) return;
+  const total = computeDayTotal(dayId);
+  badge.textContent = total + (total === 1 ? " pessoa" : " pessoas");
+}
+
+function buildAttendanceSection(d) {
+  const wrap = document.createElement("div");
+  wrap.className = "attendance";
+
+  const badge = document.createElement("div");
+  badge.className = "attendance-badge";
+  wrap.appendChild(badge);
+  attendanceBadges.set(d.id, badge);
+  renderAttendanceBadge(d.id);
+
+  const control = document.createElement("div");
+  control.className = "attendance-control";
+
+  const minus = document.createElement("button");
+  minus.type = "button";
+  minus.className = "att-btn";
+  minus.textContent = "−";
+
+  const countDisplay = document.createElement("span");
+  countDisplay.className = "att-count";
+
+  const plus = document.createElement("button");
+  plus.type = "button";
+  plus.className = "att-btn";
+  plus.textContent = "+";
+
+  const skipBtn = document.createElement("button");
+  skipBtn.type = "button";
+  skipBtn.className = "att-skip";
+  skipBtn.textContent = "Não vou";
+
+  let myCount = getMyCount(d.id);
+
+  function paint() {
+    countDisplay.textContent = String(myCount);
+    skipBtn.classList.toggle("active", myCount === 0);
+  }
+  paint();
+
+  function commit() {
+    minus.disabled = plus.disabled = skipBtn.disabled = true;
+    backend
+      .writeAttendance(d.id, myCount)
+      .catch(() => setStatus("Não foi possível guardar a presença.", "error"))
+      .finally(() => {
+        minus.disabled = plus.disabled = skipBtn.disabled = false;
+      });
+  }
+
+  minus.addEventListener("click", () => {
+    myCount = Math.max(0, myCount - 1);
+    paint();
+    commit();
+  });
+  plus.addEventListener("click", () => {
+    myCount = Math.min(50, myCount + 1);
+    paint();
+    commit();
+  });
+  skipBtn.addEventListener("click", () => {
+    const profile = profiles[currentUser.uid];
+    myCount = myCount === 0 ? (profile ? profile.householdSize : 1) : 0;
+    paint();
+    commit();
+  });
+
+  control.append(minus, countDisplay, plus, skipBtn);
+  wrap.appendChild(control);
+
+  attendanceControls.set(d.id, {
+    render() {
+      myCount = getMyCount(d.id);
+      paint();
+    }
+  });
+
+  return wrap;
+}
+
+function applyRemoteProfiles(remote) {
+  profiles = remote || {};
+  attendanceBadges.forEach((_, dayId) => renderAttendanceBadge(dayId));
+  attendanceControls.forEach((ctrl) => ctrl.render());
+}
+
+function applyRemoteAttendance(remote) {
+  attendance = remote || {};
+  attendanceBadges.forEach((_, dayId) => renderAttendanceBadge(dayId));
+  attendanceControls.forEach((ctrl) => ctrl.render());
 }
 
 /* =========================================================
@@ -419,6 +674,8 @@ function renderWeeks() {
   host.replaceChildren();
   textareas.clear();
   feedbackLists.clear();
+  attendanceBadges.clear();
+  attendanceControls.clear();
   const today = todayId();
 
   [[0, 7], [7, 14]].forEach(([from, to], i) => {
@@ -428,7 +685,7 @@ function renderWeeks() {
     const label = document.createElement("h2");
     label.className = "week-label";
     label.textContent =
-      "Semana " + (i + 1) + " · " + DAYS[from].num + "\u2013" + DAYS[to - 1].num + " agosto";
+      "Semana " + (i + 1) + " · " + DAYS[from].num + "–" + DAYS[to - 1].num + " agosto";
     sec.appendChild(label);
 
     const grid = document.createElement("div");
@@ -462,7 +719,7 @@ const timers = new Map();
 
 function queueWrite(dayId, value) {
   menus[dayId] = value;
-  setStatus("A guardar\u2026", "saving");
+  setStatus("A guardar…", "saving");
   clearTimeout(timers.get(dayId));
   timers.set(
     dayId,
@@ -470,11 +727,11 @@ function queueWrite(dayId, value) {
       try {
         await backend.write(dayId, value);
         setStatus(
-          "Guardado \u00E0s " +
+          "Guardado às " +
             new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" })
         );
       } catch (e) {
-        setStatus("N\u00E3o foi poss\u00EDvel guardar. Escreve outra vez para tentar de novo.", "error");
+        setStatus("Não foi possível guardar. Escreve outra vez para tentar de novo.", "error");
       }
     }, 600)
   );
@@ -485,11 +742,11 @@ function queueWrite(dayId, value) {
    ========================================================= */
 
 document.getElementById("copy").addEventListener("click", async () => {
-  let out = "\uD83D\uDC68\u200D\uD83C\uDF73 ESCALA DE JANTARES (1 a 14 de Agosto) \uD83C\uDF7D\uFE0F\n\n";
+  let out = "👨‍🍳 ESCALA DE JANTARES (1 a 14 de Agosto) 🍽️\n\n";
   DAYS.forEach((d) => {
     const m = (menus[d.id] || "").trim().replace(/\n+/g, " / ");
-    out += "\uD83D\uDCC5 " + d.num + "/08 (" + SHORT_WD[d.wd] + ") \u2014 " + PEOPLE[d.who].name + "\n";
-    out += "\uD83C\uDF7D\uFE0F Ementa: " + m + "\n";
+    out += "📅 " + d.num + "/08 (" + SHORT_WD[d.wd] + ") — " + PEOPLE[d.who].name + "\n";
+    out += "🍽️ Ementa: " + m + "\n";
 
     const entries = Object.values(feedback[d.id] || {});
     const reviews = entries.filter((e) => e.type === "review");
@@ -498,20 +755,20 @@ document.getElementById("copy").addEventListener("click", async () => {
       const parts = [];
       if (reviews.length) {
         const avg = reviews.reduce((s, r) => s + r.stars, 0) / reviews.length;
-        parts.push("\u2B50 " + avg.toFixed(1) + " (" + reviews.length + ")");
+        parts.push("⭐ " + avg.toFixed(1) + " (" + reviews.length + ")");
       }
       if (recs.length) {
-        parts.push(recs.length + (recs.length > 1 ? " recomenda\u00E7\u00F5es" : " recomenda\u00E7\u00E3o"));
+        parts.push(recs.length + (recs.length > 1 ? " recomendações" : " recomendação"));
       }
-      out += parts.join(" \u00B7 ") + "\n";
+      out += parts.join(" · ") + "\n";
     }
-    out += "\n";
+    out += "👥 " + computeDayTotal(d.id) + " pessoas\n\n";
   });
   try {
     await navigator.clipboard.writeText(out.trim());
-    setStatus("Escala copiada. J\u00E1 podes colar no grupo.");
+    setStatus("Escala copiada. Já podes colar no grupo.");
   } catch {
-    setStatus("O copiar falhou. Seleciona o texto do quadro \u00E0 m\u00E3o.", "error");
+    setStatus("O copiar falhou. Seleciona o texto do quadro à mão.", "error");
   }
 });
 
@@ -519,29 +776,106 @@ document.getElementById("copy").addEventListener("click", async () => {
    Arranque
    ========================================================= */
 
-async function boot() {
+function startApp() {
+  $gate.hidden = true;
+  $appWrap.hidden = false;
+
   renderPeople();
   renderWeeks();
+  setStatus("A ligar…");
 
-  if (isConfigured()) {
-    setStatus("A ligar\u2026");
-    try {
-      backend = await firebaseBackend();
-      $note.textContent = "As ementas ficam guardadas e aparecem a toda a gente em tempo real.";
-    } catch (e) {
-      backend = localBackend();
-      $note.textContent =
-        "Falhou a liga\u00E7\u00E3o \u00E0 base de dados \u2014 as ementas ficam s\u00F3 neste dispositivo.";
-    }
-  } else {
-    backend = localBackend();
-    $note.textContent =
-      "Falta configurar o Firebase \u2014 por agora as ementas ficam s\u00F3 neste dispositivo.";
+  backend.start(applyRemote);
+  backend.startFeedback(applyRemoteFeedback);
+  backend.startProfiles(applyRemoteProfiles);
+  backend.startAttendance(applyRemoteAttendance);
+
+  $session.textContent = "A usar como " + currentUser.name;
+  $note.textContent =
+    "As ementas, reviews e presenças ficam guardadas e sincronizam em tempo real.";
+  setStatus("");
+}
+
+async function boot() {
+  if (!isConfigured()) {
+    renderGateError("Falta configurar o Firebase — pede a quem administra o site para preencher as credenciais.");
+    return;
   }
 
-  await backend.start(applyRemote);
-  await backend.startFeedback(applyRemoteFeedback);
-  setStatus("");
+  let app, authMod, dbMod;
+  try {
+    const [{ initializeApp }, aMod, dMod] = await Promise.all([
+      import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js")
+    ]);
+    authMod = aMod;
+    dbMod = dMod;
+    app = initializeApp(firebaseConfig);
+  } catch (e) {
+    renderGateError("Não foi possível ligar ao Firebase.");
+    return;
+  }
+
+  const { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } = authMod;
+  const { getDatabase, ref, onValue, update, push, set, get } = dbMod;
+
+  const auth = getAuth(app);
+  const db = getDatabase(app);
+  backend = makeBackend(db, { ref, onValue, update, push, set, get });
+
+  function attemptLogin() {
+    renderGateLogin(async () => {
+      try {
+        await signInWithPopup(auth, new GoogleAuthProvider());
+      } catch (e) {
+        renderGateError("O login falhou. Tenta outra vez.", attemptLogin);
+      }
+    });
+  }
+
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      currentUser = null;
+      attemptLogin();
+      return;
+    }
+
+    currentUser = { uid: user.uid, name: user.displayName || user.email || "Conta Google" };
+
+    let profile;
+    try {
+      profile = await backend.readProfile(user.uid);
+    } catch (e) {
+      renderGateError("Não foi possível ligar à base de dados.");
+      return;
+    }
+
+    if (!profile) {
+      const askForProfile = () => renderProfilePrompt(currentUser.name, submitProfile);
+
+      async function submitProfile(householdSize) {
+        const newProfile = {
+          name: currentUser.name,
+          householdSize,
+          ts: Date.now()
+        };
+        try {
+          await backend.writeProfile(user.uid, newProfile);
+        } catch (e) {
+          renderGateError("Não foi possível guardar o teu perfil. Tenta outra vez.", askForProfile);
+          return;
+        }
+        profiles[user.uid] = newProfile;
+        startApp();
+      }
+
+      askForProfile();
+      return;
+    }
+
+    profiles[user.uid] = profile;
+    startApp();
+  });
 }
 
 boot();

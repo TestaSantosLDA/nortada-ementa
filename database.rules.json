@@ -36,6 +36,45 @@
           }
         }
       }
+    },
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid",
+        ".validate": "newData.hasChildren(['name', 'householdSize', 'ts'])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length <= 100"
+        },
+        "householdSize": {
+          ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 20"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "attendance": {
+      "$periodo": {
+        "$dia": {
+          "$uid": {
+            ".read": "auth != null",
+            ".write": "auth != null && auth.uid == $uid",
+            ".validate": "newData.hasChildren(['count', 'ts'])",
+            "count": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 50"
+            },
+            "ts": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": {
+              ".validate": false
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -13,14 +13,19 @@
 <link rel="stylesheet" href="./assets/styles.css">
 </head>
 <body>
-<div class="wrap">
+<div class="gate" id="gate" hidden></div>
+
+<div class="wrap" id="app-wrap" hidden>
 
   <header class="top">
     <div>
       <h1 class="title">Escala de jantares</h1>
       <p class="subtitle">1 a 14 de agosto de 2026 · 5 cozinheiros · 14 jantares</p>
     </div>
-    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <div class="head-status">
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+      <p class="session" id="session"></p>
+    </div>
   </header>
 
   <nav class="people" id="people" aria-label="Filtrar por cozinheiro"></nav>
