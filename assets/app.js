@@ -1621,9 +1621,23 @@ function buildShopListCard(listId) {
   const card = document.createElement("article");
   card.className = "shop-list";
 
+  const head = document.createElement("div");
+  head.className = "shop-list-head";
+
   const nameEl = document.createElement("h3");
   nameEl.className = "shop-list-name";
-  card.appendChild(nameEl);
+
+  const progressEl = document.createElement("span");
+  progressEl.className = "shop-progress";
+
+  head.append(nameEl, progressEl);
+  card.appendChild(head);
+
+  const barEl = document.createElement("div");
+  barEl.className = "shop-bar";
+  const barFill = document.createElement("i");
+  barEl.appendChild(barFill);
+  card.appendChild(barEl);
 
   const itemsUl = document.createElement("ul");
   itemsUl.className = "shop-items";
@@ -1665,17 +1679,25 @@ function buildShopListCard(listId) {
   });
   card.appendChild(form);
 
-  return { card, nameEl, itemsUl, chipsEl };
+  return { card, nameEl, progressEl, barFill, itemsUl, chipsEl };
 }
 
 function renderShopItems(listId) {
   const els = shopListEls.get(listId);
   if (!els) return;
 
+  /* por fazer primeiro, feitos no fim; ordem por ts dentro de cada grupo */
   const items = Object.entries((shoppingLists[listId] || {}).items || {}).sort(
-    (a, b) => (a[1].ts || 0) - (b[1].ts || 0)
+    (a, b) =>
+      (a[1].done ? 1 : 0) - (b[1].done ? 1 : 0) ||
+      (a[1].ts || 0) - (b[1].ts || 0)
   );
   els.itemsUl.replaceChildren();
+
+  const total = items.length;
+  const done = items.filter(([, item]) => item.done).length;
+  els.progressEl.textContent = total ? done + "/" + total : "";
+  els.barFill.style.width = total ? Math.round((done / total) * 100) + "%" : "0";
 
   if (!items.length) {
     const li = document.createElement("li");
