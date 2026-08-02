@@ -1468,17 +1468,27 @@ document.getElementById("shop-create").addEventListener("submit", (e) => {
    Arranque
    ========================================================= */
 
-/* Quem faz login entra automaticamente na rotação de cozinheiros
-   (só quando já existe uma escala configurada). */
+/* Quem faz login pela PRIMEIRA vez entra automaticamente na rotação
+   (só quando já existe uma escala configurada). Logins seguintes não
+   re-inscrevem — senão remover um cozinheiro na administração seria
+   revertido pela sessão aberta do removido. */
+let selfEnrollPending = false;
 let enrollingSelf = false;
 
 function enrollSelfAsCook() {
+  if (!selfEnrollPending || enrollingSelf) return;
   const cooks = scheduleConfig.cooks;
   if (!cooks || !cooks.order || !cooks.order.length) return;
-  if (cooks.order.includes(currentUser.uid) || enrollingSelf) return;
+  if (cooks.order.includes(currentUser.uid)) {
+    selfEnrollPending = false;
+    return;
+  }
   enrollingSelf = true;
   backend
     .writeCooks({ order: cooks.order.concat(currentUser.uid), ts: Date.now() })
+    .then(() => {
+      selfEnrollPending = false;
+    })
     .catch(() => {})
     .finally(() => {
       enrollingSelf = false;
@@ -1613,6 +1623,7 @@ async function boot() {
           return;
         }
         profiles[user.uid] = newProfile;
+        selfEnrollPending = true;
         startApp();
       }
 
